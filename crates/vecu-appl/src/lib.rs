@@ -155,6 +155,12 @@ pub unsafe extern "C" fn vecu_get_api(requested_version: u32, out_api: *mut Vecu
     api.key = None;
     api.sign = None;
     api.verify = None;
+    api.encrypt = None;
+    api.decrypt = None;
+    api.generate_mac = None;
+    api.verify_mac = None;
+    api.load_key = None;
+    api.rng = None;
 
     status::OK
 }

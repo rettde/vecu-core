@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 /// ABI major version – bumped on breaking changes.
 pub const ABI_VERSION_MAJOR: u16 = 1;
 /// ABI minor version – bumped on backward‑compatible additions.
-pub const ABI_VERSION_MINOR: u16 = 0;
+pub const ABI_VERSION_MINOR: u16 = 1;
 
 /// Pack major/minor into a single `u32` for the ABI boundary.
 #[must_use]
@@ -80,6 +80,10 @@ pub const CAP_DIAGNOSTICS: u32 = 1 << 1;
 pub const CAP_HSM_SEED_KEY: u32 = 1 << 2;
 /// HSM supports sign/verify.
 pub const CAP_SIGN_VERIFY: u32 = 1 << 3;
+/// HSM supports AES‑128 encrypt/decrypt.
+pub const CAP_HSM_ENCRYPT: u32 = 1 << 4;
+/// HSM supports random number generation.
+pub const CAP_HSM_RNG: u32 = 1 << 5;
 
 // ---------------------------------------------------------------------------
 // Module kind
@@ -218,6 +222,96 @@ pub struct VecuPluginApi {
     pub verify: Option<
         unsafe extern "C" fn(data: *const u8, data_len: u32, sig: *const u8, sig_len: u32) -> i32,
     >,
+
+    // -- HSM SHE Crypto (optional, requires [`CAP_HSM_ENCRYPT`]) -------------
+    /// AES‑128 encrypt (ECB or CBC).
+    ///
+    /// `mode`: [`SHE_MODE_ECB`] or [`SHE_MODE_CBC`].\
+    /// `iv`: ignored for ECB, must point to 16 bytes for CBC.
+    ///
+    /// # Safety
+    ///
+    /// `data` must point to `data_len` readable bytes (multiple of 16).
+    /// `iv` must be null (ECB) or point to 16 readable bytes (CBC).
+    /// `out` must point to a writeable buffer of at least `data_len` bytes.
+    /// `out_len` must point to a writeable `u32`.
+    pub encrypt: Option<
+        unsafe extern "C" fn(
+            key_slot: u32,
+            mode: u32,
+            data: *const u8,
+            data_len: u32,
+            iv: *const u8,
+            out: *mut u8,
+            out_len: *mut u32,
+        ) -> i32,
+    >,
+    /// AES‑128 decrypt (ECB or CBC).
+    ///
+    /// See [`VecuPluginApi::encrypt`] for parameter semantics.
+    ///
+    /// # Safety
+    ///
+    /// Same requirements as [`encrypt`](VecuPluginApi::encrypt).
+    pub decrypt: Option<
+        unsafe extern "C" fn(
+            key_slot: u32,
+            mode: u32,
+            data: *const u8,
+            data_len: u32,
+            iv: *const u8,
+            out: *mut u8,
+            out_len: *mut u32,
+        ) -> i32,
+    >,
+    /// Generate an AES‑128‑CMAC over `data`.
+    ///
+    /// Writes 16‑byte MAC to `out_mac`.
+    ///
+    /// # Safety
+    ///
+    /// `data` must point to `data_len` readable bytes.
+    /// `out_mac` must point to a writeable buffer of at least 16 bytes.
+    /// `out_mac_len` must point to a writeable `u32`.
+    pub generate_mac: Option<
+        unsafe extern "C" fn(
+            key_slot: u32,
+            data: *const u8,
+            data_len: u32,
+            out_mac: *mut u8,
+            out_mac_len: *mut u32,
+        ) -> i32,
+    >,
+    /// Verify an AES‑128‑CMAC over `data`.
+    ///
+    /// Returns [`status::OK`] if MAC matches, [`status::MODULE_ERROR`] if not.
+    ///
+    /// # Safety
+    ///
+    /// `data` must point to `data_len` readable bytes.
+    /// `mac` must point to `mac_len` readable bytes.
+    pub verify_mac: Option<
+        unsafe extern "C" fn(
+            key_slot: u32,
+            data: *const u8,
+            data_len: u32,
+            mac: *const u8,
+            mac_len: u32,
+        ) -> i32,
+    >,
+    /// Load a plain key into a key slot.
+    ///
+    /// # Safety
+    ///
+    /// `key_data` must point to `key_len` readable bytes.
+    pub load_key:
+        Option<unsafe extern "C" fn(slot: u32, key_data: *const u8, key_len: u32) -> i32>,
+    /// Generate cryptographically secure random bytes.
+    ///
+    /// # Safety
+    ///
+    /// `out_buf` must point to a writeable buffer of at least `buf_len` bytes.
+    pub rng: Option<unsafe extern "C" fn(out_buf: *mut u8, buf_len: u32) -> i32>,
 }
 
 impl VecuPluginApi {
@@ -248,6 +342,12 @@ impl std::fmt::Debug for VecuPluginApi {
             .field("key", &self.key.is_some())
             .field("sign", &self.sign.is_some())
             .field("verify", &self.verify.is_some())
+            .field("encrypt", &self.encrypt.is_some())
+            .field("decrypt", &self.decrypt.is_some())
+            .field("generate_mac", &self.generate_mac.is_some())
+            .field("verify_mac", &self.verify_mac.is_some())
+            .field("load_key", &self.load_key.is_some())
+            .field("rng", &self.rng.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -509,6 +609,20 @@ pub const DEFAULT_VARS_SIZE: u32 = 4096;
 /// Maximum buffer size for HSM seed / key / signature operations.
 pub const HSM_BUF_SIZE: usize = 256;
 
+/// Number of key slots in the SHE‑compatible key store.
+pub const SHE_NUM_KEY_SLOTS: usize = 20;
+/// AES‑128 key size in bytes.
+pub const AES128_KEY_SIZE: usize = 16;
+/// AES‑128 block size in bytes.
+pub const AES128_BLOCK_SIZE: usize = 16;
+/// AES‑128‑CMAC tag size in bytes.
+pub const AES128_CMAC_SIZE: usize = 16;
+
+/// SHE cipher mode: ECB.
+pub const SHE_MODE_ECB: u32 = 0;
+/// SHE cipher mode: CBC.
+pub const SHE_MODE_CBC: u32 = 1;
+
 // ---------------------------------------------------------------------------
 // Result / error types
 // ---------------------------------------------------------------------------
@@ -690,9 +804,29 @@ mod tests {
 
     #[test]
     fn capability_flags_are_distinct() {
-        assert_eq!(CAP_FRAME_IO & CAP_DIAGNOSTICS, 0);
-        assert_eq!(CAP_FRAME_IO & CAP_HSM_SEED_KEY, 0);
-        assert_eq!(CAP_DIAGNOSTICS & CAP_SIGN_VERIFY, 0);
+        let all = [
+            CAP_FRAME_IO,
+            CAP_DIAGNOSTICS,
+            CAP_HSM_SEED_KEY,
+            CAP_SIGN_VERIFY,
+            CAP_HSM_ENCRYPT,
+            CAP_HSM_RNG,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for b in &all[i + 1..] {
+                assert_eq!(a & b, 0, "capability flags overlap: {a:#x} & {b:#x}");
+            }
+        }
+    }
+
+    #[test]
+    fn she_constants() {
+        assert_eq!(AES128_KEY_SIZE, 16);
+        assert_eq!(AES128_BLOCK_SIZE, 16);
+        assert_eq!(AES128_CMAC_SIZE, 16);
+        assert_eq!(SHE_NUM_KEY_SLOTS, 20);
+        assert_eq!(SHE_MODE_ECB, 0);
+        assert_eq!(SHE_MODE_CBC, 1);
     }
 
     #[test]

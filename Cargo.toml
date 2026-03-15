@@ -43,6 +43,13 @@ memmap2 = "0.9"
 bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 static_assertions = "1"
 
+# Crypto (SHE‑compatible HSM)
+aes = "0.8"
+cbc = "0.1"
+cmac = "0.7"
+rand = "0.8"
+zeroize = { version = "1", features = ["derive"] }
+
 # Testing
 proptest = "1"
 

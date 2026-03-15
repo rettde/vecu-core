@@ -12,6 +12,11 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 vecu-abi = { path = "../vecu-abi" }
 bytemuck = { workspace = true }
+aes = { workspace = true }
+cbc = { workspace = true }
+cmac = { workspace = true }
+rand = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
