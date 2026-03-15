@@ -1,0 +1,19 @@
+[package]
+name = "vecu-runtime"
+description = "Deterministic tick-based runtime for vECU module execution"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+vecu-abi = { path = "../vecu-abi" }
+vecu-shm = { path = "../vecu-shm" }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

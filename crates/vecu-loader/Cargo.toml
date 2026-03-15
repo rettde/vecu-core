@@ -1,0 +1,31 @@
+[package]
+name = "vecu-loader"
+description = "Cross-platform plugin loader and orchestrator for the vECU system"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "vecu-loader"
+path = "src/main.rs"
+
+[dependencies]
+vecu-abi = { path = "../vecu-abi" }
+vecu-runtime = { path = "../vecu-runtime" }
+vecu-shm = { path = "../vecu-shm" }
+vecu-silkit = { path = "../vecu-silkit" }
+libloading = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+clap = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = "3"
+
+[lints]
+workspace = true

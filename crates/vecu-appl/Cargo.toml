@@ -1,0 +1,19 @@
+[package]
+name = "vecu-appl"
+description = "ECU application module implementing user-defined logic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+vecu-abi = { path = "../vecu-abi" }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

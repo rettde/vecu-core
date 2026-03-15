@@ -1,0 +1,21 @@
+[package]
+name = "vecu-hsm"
+description = "Hardware Security Module simulation for vECU"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+vecu-abi = { path = "../vecu-abi" }
+bytemuck = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+vecu-shm = { path = "../vecu-shm" }
+
+[lints]
+workspace = true

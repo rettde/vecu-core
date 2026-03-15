@@ -1,0 +1,21 @@
+[package]
+name = "vecu-silkit"
+description = "SIL Kit (Vector) runtime adapter for the vECU execution system"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+vecu-abi = { path = "../vecu-abi" }
+vecu-shm = { path = "../vecu-shm" }
+vecu-runtime = { path = "../vecu-runtime" }
+libloading = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true
