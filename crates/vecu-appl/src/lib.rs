@@ -1,9 +1,23 @@
-//! Reference APPL module for the vECU execution system (ADR‑002).
+//! APPL module for the vECU execution system (ADR‑002 / ADR‑005).
 //!
 //! Exports the single symbol `vecu_get_api` (ADR‑001).
 //! Compiled as `cdylib` for dynamic loading and `rlib` for tests.
+//!
+//! **Two modes of operation:**
+//!
+//! - **Bridge mode** (ADR‑005): loads external `BaseLayer` + ECU application
+//!   shared libraries via `VECU_BASE_LIB` / `VECU_APPL_LIB` env vars and
+//!   delegates lifecycle calls to the C code.
+//! - **Echo mode** (fallback): when no env vars are set, echoes the last
+//!   inbound frame as outbound (reference implementation from ADR‑002).
+
+#[allow(unsafe_code)]
+mod bridge;
+#[allow(unsafe_code)]
+mod context;
 
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, Ordering};
+use std::sync::Mutex;
 
 use vecu_abi::{
     status, ModuleKind, VecuFrame, VecuPluginApi, VecuRuntimeContext, ABI_VERSION, CAP_FRAME_IO,
@@ -21,11 +35,79 @@ static SHM_SIZE: AtomicU32 = AtomicU32::new(0);
 /// In a real module this would be a proper queue.
 static TX_FRAME_VALID: AtomicBool = AtomicBool::new(false);
 
-// We use a mutex for the frame buffers since VecuFrame is 80 bytes.
-use std::sync::Mutex;
-
 static TX_FRAME: Mutex<Option<VecuFrame>> = Mutex::new(None);
 static LAST_INBOUND: Mutex<Option<VecuFrame>> = Mutex::new(None);
+
+/// Bridge state: holds the loaded C libraries and callback context.
+static BRIDGE: Mutex<Option<bridge::BridgeLoader>> = Mutex::new(None);
+
+/// Heap‑allocated callback context kept alive for the duration of the bridge.
+static BRIDGE_CTX: Mutex<Option<Box<context::VecuBaseContext>>> = Mutex::new(None);
+
+/// Stored loader log function pointer (used by context trampolines).
+static BRIDGE_LOG_FN: AtomicPtr<core::ffi::c_void> =
+    AtomicPtr::new(core::ptr::null_mut());
+
+/// Tick interval from the runtime context (used by context builder).
+static TICK_INTERVAL_US: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(1000);
+
+// ---------------------------------------------------------------------------
+// Bridge mode helpers
+// ---------------------------------------------------------------------------
+
+/// Try to load the `BaseLayer` and Application libraries from environment
+/// variables.  Returns `true` if bridge mode was activated.
+#[allow(unsafe_code)]
+fn try_activate_bridge(ctx: &VecuRuntimeContext) -> bool {
+    let base_path = match std::env::var("VECU_BASE_LIB") {
+        Ok(p) if !p.is_empty() => p,
+        _ => return false,
+    };
+    let appl_path = match std::env::var("VECU_APPL_LIB") {
+        Ok(p) if !p.is_empty() => p,
+        _ => return false,
+    };
+
+    // Store the log function pointer for the trampoline.
+    if let Some(f) = ctx.log_fn {
+        BRIDGE_LOG_FN.store(f as *mut core::ffi::c_void, Ordering::Release);
+    }
+    TICK_INTERVAL_US.store(ctx.tick_interval_us, Ordering::Release);
+
+    // Load libraries
+    let loader = match unsafe {
+        bridge::BridgeLoader::load(
+            std::path::Path::new(&base_path),
+            std::path::Path::new(&appl_path),
+        )
+    } {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("[vecu-appl] bridge load failed: {e}");
+            return false;
+        }
+    };
+
+    // Build callback context
+    // For now shm_vars points to NULL — will be computed from SHM header
+    // offset when vecu-shm integration is wired (P4+).
+    let base_ctx = Box::new(context::VecuBaseContext::build(
+        core::ptr::null_mut(), // shm_vars (TODO: compute from off_vars)
+        0,                     // shm_vars_size
+        ctx.tick_interval_us,
+    ));
+
+    // Call Base_Init and Appl_Init
+    unsafe { loader.call_base_init(std::ptr::addr_of!(*base_ctx)) };
+    loader.call_appl_init();
+
+    // Store state
+    *BRIDGE.lock().expect("lock") = Some(loader);
+    *BRIDGE_CTX.lock().expect("lock") = Some(base_ctx);
+
+    true
+}
 
 // ---------------------------------------------------------------------------
 // ABI functions
@@ -47,10 +129,24 @@ unsafe extern "C" fn appl_init(ctx: *const VecuRuntimeContext) -> i32 {
     *TX_FRAME.lock().expect("lock") = None;
     *LAST_INBOUND.lock().expect("lock") = None;
     TX_FRAME_VALID.store(false, Ordering::Release);
+
+    // Try bridge mode; if env vars not set, fall back to echo mode.
+    try_activate_bridge(ctx);
+
     status::OK
 }
 
 extern "C" fn appl_shutdown() {
+    // Shutdown bridge if active
+    let bridge = BRIDGE.lock().expect("lock").take();
+    if let Some(b) = bridge {
+        b.call_appl_shutdown();
+        b.call_base_shutdown();
+        // Libraries dropped here
+    }
+    *BRIDGE_CTX.lock().expect("lock") = None;
+    BRIDGE_LOG_FN.store(core::ptr::null_mut(), Ordering::Release);
+
     INITIALIZED.store(false, Ordering::Release);
     SHM_BASE.store(core::ptr::null_mut(), Ordering::Release);
     SHM_SIZE.store(0, Ordering::Release);
@@ -65,14 +161,21 @@ unsafe extern "C" fn appl_step(tick: u64) -> i32 {
         return status::INIT_FAILED;
     }
 
-    // Reference logic: echo the last inbound frame back as outbound
-    // with the tick stamped.
-    let guard = LAST_INBOUND.lock().expect("lock");
-    if let Some(inbound) = &*guard {
-        let mut out = *inbound;
-        out.timestamp = tick;
-        *TX_FRAME.lock().expect("lock") = Some(out);
-        TX_FRAME_VALID.store(true, Ordering::Release);
+    let guard = BRIDGE.lock().expect("lock");
+    if let Some(bridge) = &*guard {
+        // Bridge mode: delegate to C code
+        bridge.call_base_step(tick);
+        bridge.call_appl_main();
+    } else {
+        // Echo mode: echo the last inbound frame back as outbound
+        let inbound_guard = LAST_INBOUND.lock().expect("lock");
+        if let Some(inbound) = &*inbound_guard {
+            let mut out = *inbound;
+            out.timestamp = tick;
+            *TX_FRAME.lock().expect("lock") = Some(out);
+            TX_FRAME_VALID.store(true, Ordering::Release);
+        }
+        drop(inbound_guard);
     }
     drop(guard);
 
