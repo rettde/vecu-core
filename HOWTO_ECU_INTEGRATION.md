@@ -28,6 +28,7 @@ AUTOSAR Classic ECU source code and want to run it as a virtual ECU.
 9. [SecurityAccess with HSM](#9-securityaccess-with-hsm)
 10. [Troubleshooting](#10-troubleshooting)
 11. [Differences from Vector VTT](#11-differences-from-vector-vtt)
+12. [Using the Vector AUTOSAR BSW Instead of Stubs](#12-using-the-vector-autosar-bsw-instead-of-stubs)
 
 ---
 
@@ -703,6 +704,203 @@ If you are migrating from VTT, here are the key differences:
 
 Typical migration effort: **1–3 days** per ECU project, depending on
 complexity and number of hardware‑dependent code sections.
+
+---
+
+## 12. Using the Vector AUTOSAR BSW Instead of Stubs
+
+If you have a licensed Vector AUTOSAR BSW (from a DaVinci Configurator
+project / SIP), you can use it **instead of our stub BaseLayer**. This
+gives you production‑grade BSW behaviour (real scheduling, full NvM state
+machine, etc.) while still running on the host PC via the vECU runtime.
+
+### Concept
+
+```
+┌─────────────────────────────────────────────┐
+│  vECU Runtime (Rust)                        │
+│  ┌───────────────────────────────────────┐  │
+│  │  vecu-appl (ABI Bridge)               │  │
+│  │  ┌─────────────────────────────────┐  │  │
+│  │  │  YOUR ECU C‑CODE (SWCs)        │  │  │
+│  │  └─────────────┬───────────────────┘  │  │
+│  │                │ calls BSW APIs        │  │
+│  │  ┌─────────────▼───────────────────┐  │  │
+│  │  │  Vector AUTOSAR BSW            │  │  │  ← replaces libbase.so
+│  │  │  (Com, Dcm, NvM, SchM, …)     │  │  │
+│  │  │  + MCAL SiL stubs             │  │  │
+│  │  │  + Base_Entry.c (adapter)      │  │  │
+│  │  └─────────────────────────────────┘  │  │
+│  └───────────────────────────────────────┘  │
+└─────────────────────────────────────────────┘
+```
+
+The key difference: **the Vector BSW replaces `libbase.so`** entirely.
+Your SWC code stays the same — it calls the same AUTOSAR APIs either way.
+
+### Prerequisites
+
+- **DaVinci Configurator** project with generated BSW source code
+- **Vector SIP** (Software Integration Package) for your µC family
+- **MCAL SiL stubs** from Vector (VTT MCAL) or your own stubs
+- A compiler that can build the Vector BSW for the host (gcc/clang/MSVC)
+
+### Step 1: Create the Adapter (`Base_Entry.c`)
+
+The vECU runtime expects three exported functions. You write a thin
+adapter that maps them to the Vector BSW lifecycle:
+
+```c
+/* Base_Entry.c — Adapter for Vector AUTOSAR BSW */
+#include "vecu_base_context.h"
+#include "EcuM.h"
+#include "SchM.h"
+#include "BswM.h"
+
+static const vecu_base_context_t* g_ctx = NULL;
+
+const vecu_base_context_t* Base_GetCtx(void) { return g_ctx; }
+
+#ifdef _WIN32
+  #define EXPORT __declspec(dllexport)
+#else
+  #define EXPORT __attribute__((visibility("default")))
+#endif
+
+EXPORT void Base_Init(const vecu_base_context_t* ctx) {
+    g_ctx = ctx;
+    /* Vector BSW init sequence (order from EcuM_Init / EcuM_StartupTwo) */
+    EcuM_Init();          /* calls SchM_Init, Det_Init, BswM_Init, … */
+    /* EcuM_StartupTwo is typically called by the Os — trigger it: */
+    EcuM_StartupTwo();
+}
+
+EXPORT void Base_Step(uint64_t tick) {
+    /* Drive the SchM main‑function schedule.
+     * In production, the Os does this via tasks.
+     * Here we call one "tick" worth of processing: */
+    SchM_MainFunction();
+    BswM_MainFunction();
+    /* Add any other periodic MainFunctions your config needs */
+}
+
+EXPORT void Base_Shutdown(void) {
+    EcuM_GoSleep();
+    EcuM_GoDown();
+    g_ctx = NULL;
+}
+```
+
+> **Note:** The exact init sequence depends on your DaVinci configuration.
+> Check your `EcuM_Callout_Stubs.c` for the correct order.
+
+### Step 2: Provide MCAL SiL Stubs
+
+The Vector BSW calls MCAL drivers (CAN driver, SPI, GPT, etc.) which
+don't exist on the host PC. You need stub implementations:
+
+| MCAL Module | What the Stub Does |
+|-------------|-------------------|
+| `Can` | Routes TX frames via `g_ctx->push_tx_frame()` |
+| `CanTrcv` | Returns E_OK (transceiver always on) |
+| `Gpt` | Maps to host timer or `Os_GetTick()` |
+| `Spi` | No‑op or returns E_OK |
+| `Fls` | Maps to SHM vars block (like our NvM) |
+| `Port`, `Dio` | No‑op stubs |
+
+Vector provides **VTT MCAL stubs** for exactly this purpose. If you have
+a VTT license, use `Vtt_Can.c`, `Vtt_Fls.c`, etc. Otherwise, write
+minimal stubs yourself — typically 5–20 lines per module.
+
+**Critical:** The CAN driver stub must bridge to `vecu_base_context_t`:
+
+```c
+/* Can_SiL.c — CAN driver stub for host simulation */
+#include "vecu_base_context.h"
+#include "Can.h"
+
+extern const vecu_base_context_t* Base_GetCtx(void);
+
+Std_ReturnType Can_Write(Can_HwHandleType hth,
+                         const Can_PduType* pduInfo)
+{
+    const vecu_base_context_t* ctx = Base_GetCtx();
+    if (ctx == NULL || ctx->push_tx_frame == NULL) return E_NOT_OK;
+
+    vecu_frame_t frame = {0};
+    frame.id   = pduInfo->id;
+    frame.dlc  = pduInfo->length;
+    frame.bus  = VECU_BUS_CAN;
+    if (pduInfo->length > 0 && pduInfo->length <= MAX_FRAME_DATA) {
+        memcpy(frame.data, pduInfo->sdu, pduInfo->length);
+    }
+    ctx->push_tx_frame(&frame);
+    return E_OK;
+}
+```
+
+### Step 3: Build as Shared Library
+
+```cmake
+cmake_minimum_required(VERSION 3.16)
+project(vector_base C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# Vector BSW generated sources
+file(GLOB VECTOR_BSW_SOURCES
+    "${DAVINCI_GEN_DIR}/source/*.c"
+)
+
+# MCAL SiL stubs
+set(MCAL_STUBS
+    stubs/Can_SiL.c
+    stubs/Fls_SiL.c
+    stubs/Gpt_SiL.c
+    # …
+)
+
+add_library(base SHARED
+    Base_Entry.c          # our adapter
+    ${VECTOR_BSW_SOURCES}
+    ${MCAL_STUBS}
+)
+
+target_include_directories(base PRIVATE
+    ${DAVINCI_GEN_DIR}/include
+    ${VECTOR_SIP_DIR}/BSW/include
+    ${VECU_CORE_DIR}/crates/vecu-abi/include
+)
+
+target_compile_options(base PRIVATE -fvisibility=default)
+```
+
+### Step 4: Use in config.yaml
+
+```yaml
+appl:
+  bridge: "vecu-core/target/release/libvecu_appl.dylib"
+  base_layer: "vector_base/build/libbase.dylib"   # ← Vector BSW
+  ecu_code: "my_ecu/build/libappl_ecu.dylib"
+```
+
+The rest of the workflow (SWC code, RTE headers, `config.yaml`,
+`vecu‑loader`) stays **exactly the same**.
+
+### When to Use Stubs vs. Vector BSW
+
+| Scenario | Recommendation |
+|----------|---------------|
+| Early development / prototyping | **Stubs** — faster build, no license needed |
+| SWC unit testing | **Stubs** — deterministic, simple |
+| CI / automated testing | **Stubs** — no Vector license on build server |
+| System‑level integration testing | **Vector BSW** — production‑accurate behaviour |
+| Pre‑SiL validation close to target | **Vector BSW** — real state machines |
+| Customer demos / acceptance tests | **Vector BSW** — matches target ECU |
+
+> **Tip:** You can maintain both setups in parallel. The SWC code and RTE
+> headers are identical — only `libbase.so` is swapped.
 
 ---
 
