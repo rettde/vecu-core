@@ -12,7 +12,7 @@
 #include "Com.h"
 
 static inline Std_ReturnType Rte_Write_ActuatorCommand(uint32 value) {
-    return Com_SendSignal(3, value);
+    return Com_SendSignal(3, &value);
 }
 
 #endif /* RTE_SWCACTUATOR_H */

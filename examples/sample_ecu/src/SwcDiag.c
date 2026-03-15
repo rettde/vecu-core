@@ -34,6 +34,6 @@ void SwcDiag_MainFunction(void) {
     uint32 speed = SwcSensor_GetVehicleSpeed();
     if (speed > 250u) {
         /* Over-speed DTC */
-        Rte_ReportDtc(0x00C1_0100u, 1u);
+        Rte_ReportDtc(0x00C10100u, 1u);
     }
 }
