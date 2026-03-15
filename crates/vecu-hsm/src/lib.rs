@@ -49,6 +49,24 @@ const SECURITY_ACCESS_KEY_SLOT: usize = 0;
 /// Seed length for `SecurityAccess` (16 bytes = one AES block).
 const SEED_LEN: usize = AES128_KEY_SIZE;
 
+// Compile‑time constraint checks.
+const _: () = assert!(
+    SECURITY_ACCESS_KEY_SLOT < SHE_NUM_KEY_SLOTS,
+    "master key slot must be within key store bounds"
+);
+const _: () = assert!(
+    SEED_LEN <= vecu_abi::DIAG_DATA_SIZE,
+    "seed must fit in diagnostic mailbox data area"
+);
+const _: () = assert!(
+    SEED_LEN <= HSM_BUF_SIZE,
+    "seed must fit in HSM buffer"
+);
+const _: () = assert!(
+    AES128_CMAC_SIZE <= HSM_BUF_SIZE,
+    "CMAC tag must fit in HSM buffer"
+);
+
 // ---------------------------------------------------------------------------
 // Key store
 // ---------------------------------------------------------------------------
@@ -107,7 +125,7 @@ static LAST_SEED: Mutex<Option<[u8; SEED_LEN]>> = Mutex::new(None);
 
 /// AES‑128 ECB encrypt: `data` must be a multiple of 16 bytes.
 fn aes_ecb_encrypt(key: &[u8; AES128_KEY_SIZE], data: &[u8], out: &mut [u8]) -> bool {
-    if data.len() % AES128_BLOCK_SIZE != 0 || out.len() < data.len() {
+    if data.is_empty() || data.len() % AES128_BLOCK_SIZE != 0 || out.len() < data.len() {
         return false;
     }
     let cipher = Aes128::new(key.into());
@@ -120,7 +138,7 @@ fn aes_ecb_encrypt(key: &[u8; AES128_KEY_SIZE], data: &[u8], out: &mut [u8]) -> 
 
 /// AES‑128 ECB decrypt: `data` must be a multiple of 16 bytes.
 fn aes_ecb_decrypt(key: &[u8; AES128_KEY_SIZE], data: &[u8], out: &mut [u8]) -> bool {
-    if data.len() % AES128_BLOCK_SIZE != 0 || out.len() < data.len() {
+    if data.is_empty() || data.len() % AES128_BLOCK_SIZE != 0 || out.len() < data.len() {
         return false;
     }
     let cipher = Aes128::new(key.into());
@@ -138,7 +156,7 @@ fn aes_cbc_encrypt(
     data: &[u8],
     out: &mut [u8],
 ) -> bool {
-    if data.len() % AES128_BLOCK_SIZE != 0 || out.len() < data.len() {
+    if data.is_empty() || data.len() % AES128_BLOCK_SIZE != 0 || out.len() < data.len() {
         return false;
     }
     let cipher = Aes128::new(key.into());
@@ -165,7 +183,7 @@ fn aes_cbc_decrypt(
     data: &[u8],
     out: &mut [u8],
 ) -> bool {
-    if data.len() % AES128_BLOCK_SIZE != 0 || out.len() < data.len() {
+    if data.is_empty() || data.len() % AES128_BLOCK_SIZE != 0 || out.len() < data.len() {
         return false;
     }
     let cipher = Aes128::new(key.into());
@@ -325,8 +343,8 @@ unsafe extern "C" fn hsm_key(key_buf: *const u8, key_len: u32) -> i32 {
         return status::MODULE_ERROR;
     }
 
-    let seed_guard = LAST_SEED.lock().expect("seed lock");
-    let Some(seed) = *seed_guard else {
+    let mut seed_guard = LAST_SEED.lock().expect("seed lock");
+    let Some(seed) = seed_guard.take() else {
         return status::MODULE_ERROR;
     };
     drop(seed_guard);
@@ -638,6 +656,11 @@ unsafe extern "C" fn hsm_load_key(slot: u32, key_data: *const u8, key_len: u32) 
     if key_len as usize != AES128_KEY_SIZE {
         return status::INVALID_ARGUMENT;
     }
+    // Slot 0 is the SecurityAccess master key — not user-writable.
+    #[allow(clippy::cast_possible_truncation)]
+    if slot == SECURITY_ACCESS_KEY_SLOT as u32 {
+        return status::INVALID_ARGUMENT;
+    }
 
     let key_slice = unsafe { core::slice::from_raw_parts(key_data, AES128_KEY_SIZE) };
     let mut key = [0u8; AES128_KEY_SIZE];
@@ -690,22 +713,29 @@ fn process_diag_mailbox(base: *mut u8, size: usize) {
         return;
     }
 
-    // SAFETY: base is a valid pointer to the SHM region, guaranteed by init.
-    #[allow(unsafe_code)]
-    let hdr_bytes: &[u8] = unsafe { core::slice::from_raw_parts(base, hdr_size) };
-    let hdr: &VecuShmHeader = bytemuck::from_bytes(hdr_bytes);
+    // Read header values via a temporary shared reference, then drop it
+    // before creating a mutable reference to the mailbox region.
+    let (mb_off, mb_size) = {
+        // SAFETY: base is a valid pointer to the SHM region, guaranteed by init.
+        #[allow(unsafe_code)]
+        let hdr_bytes: &[u8] = unsafe { core::slice::from_raw_parts(base, hdr_size) };
+        let hdr: &VecuShmHeader = bytemuck::from_bytes(hdr_bytes);
+        (hdr.off_diag_mb as usize, hdr.size_diag_mb as usize)
+    }; // hdr_bytes and hdr are dropped here — no aliasing.
 
-    let mb_off = hdr.off_diag_mb as usize;
-    let mb_size = hdr.size_diag_mb as usize;
     let diag_struct_size = core::mem::size_of::<DiagMailbox>();
     if mb_size < diag_struct_size {
         return;
     }
-    if mb_off + mb_size > size {
+    // Guard against overflow in offset + size arithmetic.
+    let Some(mb_end) = mb_off.checked_add(mb_size) else {
+        return;
+    };
+    if mb_end > size {
         return;
     }
 
-    // SAFETY: offset and size validated above.
+    // SAFETY: offset and size validated above; no outstanding shared references.
     #[allow(unsafe_code)]
     let mb_bytes: &mut [u8] =
         unsafe { core::slice::from_raw_parts_mut(base.add(mb_off), diag_struct_size) };
@@ -1351,5 +1381,100 @@ mod tests {
         assert_eq!(mb.response_status, 0);
         // Seed should be 16 bytes of random data (not all zero).
         assert_ne!(&mb.data[..SEED_LEN], &[0u8; SEED_LEN]);
+    }
+
+    // -- Constraint regression tests -----------------------------------------
+
+    #[test]
+    fn seed_consumed_after_successful_key_validation() {
+        let _g = TEST_LOCK.lock().unwrap();
+        reset();
+        init_hsm();
+
+        // Generate seed and compute valid key.
+        let mut seed_buf = [0u8; HSM_BUF_SIZE];
+        let mut seed_len = 0u32;
+        #[allow(unsafe_code)]
+        unsafe {
+            hsm_seed(seed_buf.as_mut_ptr(), &mut seed_len);
+        }
+        let expected_key = aes_cmac(&DEFAULT_MASTER_KEY, &seed_buf[..SEED_LEN]);
+
+        // First validation succeeds.
+        #[allow(unsafe_code)]
+        let rc = unsafe { hsm_key(expected_key.as_ptr(), AES128_CMAC_SIZE as u32) };
+        assert_eq!(rc, status::OK);
+
+        // Second attempt with the SAME key must fail (seed consumed).
+        #[allow(unsafe_code)]
+        let rc = unsafe { hsm_key(expected_key.as_ptr(), AES128_CMAC_SIZE as u32) };
+        assert_eq!(rc, status::MODULE_ERROR, "seed replay must be rejected");
+    }
+
+    #[test]
+    fn load_key_rejects_master_key_slot() {
+        let _g = TEST_LOCK.lock().unwrap();
+        reset();
+        init_hsm();
+
+        let key = [0xFFu8; AES128_KEY_SIZE];
+        #[allow(unsafe_code)]
+        let rc = unsafe {
+            hsm_load_key(
+                SECURITY_ACCESS_KEY_SLOT as u32,
+                key.as_ptr(),
+                AES128_KEY_SIZE as u32,
+            )
+        };
+        assert_eq!(
+            rc,
+            status::INVALID_ARGUMENT,
+            "slot 0 (master key) must not be overwritable"
+        );
+    }
+
+    #[test]
+    fn encrypt_rejects_zero_length_data() {
+        let _g = TEST_LOCK.lock().unwrap();
+        reset();
+        init_hsm();
+        let mut out = [0u8; 16];
+        let mut out_len = 0u32;
+        // data_len = 0 is invalid even though 0 % 16 == 0.
+        #[allow(unsafe_code)]
+        let rc = unsafe {
+            hsm_encrypt(
+                0,
+                SHE_MODE_ECB,
+                [].as_ptr(),
+                0,
+                core::ptr::null(),
+                out.as_mut_ptr(),
+                &mut out_len,
+            )
+        };
+        assert_eq!(rc, status::INVALID_ARGUMENT);
+    }
+
+    #[test]
+    fn decrypt_rejects_zero_length_data() {
+        let _g = TEST_LOCK.lock().unwrap();
+        reset();
+        init_hsm();
+        let mut out = [0u8; 16];
+        let mut out_len = 0u32;
+        #[allow(unsafe_code)]
+        let rc = unsafe {
+            hsm_decrypt(
+                0,
+                SHE_MODE_ECB,
+                [].as_ptr(),
+                0,
+                core::ptr::null(),
+                out.as_mut_ptr(),
+                &mut out_len,
+            )
+        };
+        assert_eq!(rc, status::INVALID_ARGUMENT);
     }
 }
