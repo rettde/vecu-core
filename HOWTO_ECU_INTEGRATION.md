@@ -58,8 +58,12 @@ The architecture has three layers:
 └─────────────────────────────────────────────┘
 ```
 
-**You provide:** ECU C‑code + RTE headers + configuration files.
-**We provide:** BaseLayer (BSW stubs), HSM, runtime, bus integration.
+| You provide | We provide |
+|-------------|------------|
+| `SwcXxx.c` — your SWC application logic | `libbase.so` — 24 AUTOSAR BSW module stubs |
+| `Rte_SwcXxx.h` — RTE headers (hand‑written or generated) | `libvecu_appl.so` — Rust ABI bridge |
+| `Appl_Entry.c` — lifecycle hooks (init / main / shutdown) | `libvecu_hsm.so` — SHE‑compatible AES‑128 crypto |
+| `Base_Entry.c` — signal, NvM, Dcm, CanTp configuration | `vecu‑loader` — tick‑based runtime + optional SIL Kit |
 
 ---
 
@@ -265,6 +269,9 @@ library. You typically build it once and reuse it across ECU projects.
 # Clone the repository
 git clone https://github.com/rettde/vecu-core.git
 cd vecu-core
+
+# Build the Rust workspace (runtime, ABI bridge, HSM)
+cargo build --release
 
 # Build the BaseLayer
 cd baselayer
