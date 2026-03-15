@@ -87,7 +87,11 @@ fn compile_baselayer(out_dir: &std::path::Path) -> PathBuf {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    assert!(lib_path.exists(), "libbase not found: {}", lib_path.display());
+    assert!(
+        lib_path.exists(),
+        "libbase not found: {}",
+        lib_path.display()
+    );
     lib_path
 }
 
@@ -116,7 +120,11 @@ fn compile_mock_appl(out_dir: &std::path::Path) -> PathBuf {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    assert!(lib_path.exists(), "libmockappl not found: {}", lib_path.display());
+    assert!(
+        lib_path.exists(),
+        "libmockappl not found: {}",
+        lib_path.display()
+    );
     lib_path
 }
 

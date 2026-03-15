@@ -32,16 +32,22 @@ type NvmReadBlockFn = unsafe extern "C" fn(u16, *mut u8) -> u8;
 
 #[repr(C)]
 struct TestVecuFrame {
-    id: u32, len: u32, bus_type: u32, pad0: u32,
-    data: [u8; 1536], timestamp: u64,
+    id: u32,
+    len: u32,
+    bus_type: u32,
+    pad0: u32,
+    data: [u8; 1536],
+    timestamp: u64,
 }
 
 #[repr(C)]
 struct TestBaseContext {
     push_tx_frame: Option<unsafe extern "C" fn(*const TestVecuFrame) -> i32>,
     pop_rx_frame: Option<unsafe extern "C" fn(*mut TestVecuFrame) -> i32>,
-    hsm_encrypt: Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
-    hsm_decrypt: Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
+    hsm_encrypt:
+        Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
+    hsm_decrypt:
+        Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
     hsm_generate_mac: Option<unsafe extern "C" fn(u32, *const u8, u32, *mut u8, *mut u32) -> i32>,
     hsm_verify_mac: Option<unsafe extern "C" fn(u32, *const u8, u32, *const u8, u32) -> i32>,
     hsm_seed: Option<unsafe extern "C" fn(*mut u8, *mut u32) -> i32>,
@@ -59,40 +65,66 @@ struct TestBaseContext {
 // ---------------------------------------------------------------------------
 
 unsafe extern "C" fn mock_hsm_generate_mac(
-    _ks: u32, _d: *const u8, _dl: u32, out: *mut u8, out_len: *mut u32,
+    _ks: u32,
+    _d: *const u8,
+    _dl: u32,
+    out: *mut u8,
+    out_len: *mut u32,
 ) -> i32 {
-    for i in 0..16_usize { unsafe { *out.add(i) = 0xBB; } }
-    unsafe { *out_len = 16; }
+    for i in 0..16_usize {
+        unsafe {
+            *out.add(i) = 0xBB;
+        }
+    }
+    unsafe {
+        *out_len = 16;
+    }
     0
 }
 
 unsafe extern "C" fn mock_hsm_verify_mac(
-    _ks: u32, _d: *const u8, _dl: u32, mac: *const u8, ml: u32,
+    _ks: u32,
+    _d: *const u8,
+    _dl: u32,
+    mac: *const u8,
+    ml: u32,
 ) -> i32 {
     for i in 0..ml as usize {
-        if unsafe { *mac.add(i) } != 0xBB { return -5; }
+        if unsafe { *mac.add(i) } != 0xBB {
+            return -5;
+        }
     }
     0
 }
 
-static MOCK_SEED: [u8; 16] = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16];
+static MOCK_SEED: [u8; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 
 unsafe extern "C" fn mock_hsm_seed(out: *mut u8, out_len: *mut u32) -> i32 {
     std::ptr::copy_nonoverlapping(MOCK_SEED.as_ptr(), out, 16);
-    unsafe { *out_len = 16; }
+    unsafe {
+        *out_len = 16;
+    }
     0
 }
 
 unsafe extern "C" fn mock_hsm_key(key: *const u8, kl: u32) -> i32 {
-    if kl != 16 { return -5; }
+    if kl != 16 {
+        return -5;
+    }
     for i in 0..16_usize {
-        if unsafe { *key.add(i) } != 0xBB { return -5; }
+        if unsafe { *key.add(i) } != 0xBB {
+            return -5;
+        }
     }
     0
 }
 
-unsafe extern "C" fn noop_push_tx(_: *const TestVecuFrame) -> i32 { -4 }
-unsafe extern "C" fn noop_pop_rx(_: *mut TestVecuFrame) -> i32 { -4 }
+unsafe extern "C" fn noop_push_tx(_: *const TestVecuFrame) -> i32 {
+    -4
+}
+unsafe extern "C" fn noop_pop_rx(_: *mut TestVecuFrame) -> i32 {
+    -4
+}
 unsafe extern "C" fn noop_log(_: u32, _: *const std::ffi::c_char) {}
 
 // ---------------------------------------------------------------------------
@@ -100,44 +132,81 @@ unsafe extern "C" fn noop_log(_: u32, _: *const std::ffi::c_char) {}
 // ---------------------------------------------------------------------------
 
 fn dylib_ext() -> &'static str {
-    if cfg!(target_os = "macos") { "dylib" }
-    else if cfg!(target_os = "windows") { "dll" }
-    else { "so" }
+    if cfg!(target_os = "macos") {
+        "dylib"
+    } else if cfg!(target_os = "windows") {
+        "dll"
+    } else {
+        "so"
+    }
 }
 
 /// All `BaseLayer` source files (P3–P6).
 const ALL_SOURCES: &[&str] = &[
-    "Base_Entry.c", "EcuM.c", "SchM.c", "Os.c", "Det.c", "Rte.c",
-    "Com.c", "PduR.c", "CanIf.c", "EthIf.c", "LinIf.c", "FrIf.c",
-    "Cry.c", "CryIf.c", "Csm.c",
-    "NvM.c", "Fee.c", "MemIf.c", "Dem.c", "Dcm.c", "FiM.c", "WdgM.c",
-    "CanTp.c", "DoIP.c",
+    "Base_Entry.c",
+    "EcuM.c",
+    "SchM.c",
+    "Os.c",
+    "Det.c",
+    "Rte.c",
+    "Com.c",
+    "PduR.c",
+    "CanIf.c",
+    "EthIf.c",
+    "LinIf.c",
+    "FrIf.c",
+    "Cry.c",
+    "CryIf.c",
+    "Csm.c",
+    "NvM.c",
+    "Fee.c",
+    "MemIf.c",
+    "Dem.c",
+    "Dcm.c",
+    "FiM.c",
+    "WdgM.c",
+    "CanTp.c",
+    "DoIP.c",
 ];
 
 fn compile_baselayer(out_dir: &std::path::Path) -> PathBuf {
     let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap().parent().unwrap().to_path_buf();
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
     let baselayer_src = workspace.join("baselayer").join("src");
     let baselayer_inc = workspace.join("baselayer").join("include");
     let abi_inc = workspace.join("crates").join("vecu-abi").join("include");
 
-    let sources: Vec<PathBuf> = ALL_SOURCES.iter()
-        .map(|s| baselayer_src.join(s)).collect();
+    let sources: Vec<PathBuf> = ALL_SOURCES.iter().map(|s| baselayer_src.join(s)).collect();
 
     let lib_path = out_dir.join(format!("libbase_diag.{}", dylib_ext()));
 
     let mut cmd = std::process::Command::new("cc");
-    cmd.arg("-shared").arg("-std=c11").arg("-fPIC")
-        .arg("-I").arg(&baselayer_inc)
-        .arg("-I").arg(&abi_inc)
-        .arg("-o").arg(&lib_path);
-    if cfg!(target_os = "macos") { cmd.arg("-dynamiclib"); }
-    for src in &sources { cmd.arg(src); }
+    cmd.arg("-shared")
+        .arg("-std=c11")
+        .arg("-fPIC")
+        .arg("-I")
+        .arg(&baselayer_inc)
+        .arg("-I")
+        .arg(&abi_inc)
+        .arg("-o")
+        .arg(&lib_path);
+    if cfg!(target_os = "macos") {
+        cmd.arg("-dynamiclib");
+    }
+    for src in &sources {
+        cmd.arg(src);
+    }
 
     let output = cmd.output().expect("failed to run cc");
-    assert!(output.status.success(),
+    assert!(
+        output.status.success(),
         "`BaseLayer` compilation failed:\n{}",
-        String::from_utf8_lossy(&output.stderr));
+        String::from_utf8_lossy(&output.stderr)
+    );
     lib_path
 }
 
@@ -145,7 +214,8 @@ fn build_ctx(shm: &mut [u8]) -> TestBaseContext {
     TestBaseContext {
         push_tx_frame: Some(noop_push_tx),
         pop_rx_frame: Some(noop_pop_rx),
-        hsm_encrypt: None, hsm_decrypt: None,
+        hsm_encrypt: None,
+        hsm_decrypt: None,
         hsm_generate_mac: Some(mock_hsm_generate_mac),
         hsm_verify_mac: Some(mock_hsm_verify_mac),
         hsm_seed: Some(mock_hsm_seed),
@@ -173,10 +243,14 @@ fn diag_security_access_via_dcm() {
     let lib = unsafe { libloading::Library::new(&lib_path) }.unwrap();
 
     let base_init: libloading::Symbol<BaseInitFn> = unsafe { lib.get(b"Base_Init") }.unwrap();
-    let base_shutdown: libloading::Symbol<BaseShutdownFn> = unsafe { lib.get(b"Base_Shutdown") }.unwrap();
-    let dcm_process: libloading::Symbol<DcmProcessFn> = unsafe { lib.get(b"Dcm_ProcessRequest") }.unwrap();
-    let dcm_session: libloading::Symbol<DcmGetSessionFn> = unsafe { lib.get(b"Dcm_GetActiveSession") }.unwrap();
-    let dcm_security: libloading::Symbol<DcmGetSecurityFn> = unsafe { lib.get(b"Dcm_GetSecurityLevel") }.unwrap();
+    let base_shutdown: libloading::Symbol<BaseShutdownFn> =
+        unsafe { lib.get(b"Base_Shutdown") }.unwrap();
+    let dcm_process: libloading::Symbol<DcmProcessFn> =
+        unsafe { lib.get(b"Dcm_ProcessRequest") }.unwrap();
+    let dcm_session: libloading::Symbol<DcmGetSessionFn> =
+        unsafe { lib.get(b"Dcm_GetActiveSession") }.unwrap();
+    let dcm_security: libloading::Symbol<DcmGetSecurityFn> =
+        unsafe { lib.get(b"Dcm_GetSecurityLevel") }.unwrap();
 
     let mut shm = [0u8; 256];
     let ctx = build_ctx(&mut shm);
@@ -205,12 +279,18 @@ fn diag_security_access_via_dcm() {
     key_req[0] = 0x27;
     key_req[1] = 0x02;
     // Mock MAC = all 0xBB
-    for b in &mut key_req[2..18] { *b = 0xBB; }
+    for b in &mut key_req[2..18] {
+        *b = 0xBB;
+    }
     let len = unsafe { (dcm_process)(key_req.as_ptr(), 18, resp.as_mut_ptr(), 256) };
     assert!(len >= 2);
     assert_eq!(resp[0], 0x67, "Positive response for key send");
     assert_eq!(resp[1], 0x02);
-    assert_eq!(unsafe { (dcm_security)() }, 0x01, "Security should be unlocked");
+    assert_eq!(
+        unsafe { (dcm_security)() },
+        0x01,
+        "Security should be unlocked"
+    );
 
     unsafe { (base_shutdown)() };
 }
@@ -224,8 +304,10 @@ fn diag_read_write_did_via_nvm() {
     let lib = unsafe { libloading::Library::new(&lib_path) }.unwrap();
 
     let base_init: libloading::Symbol<BaseInitFn> = unsafe { lib.get(b"Base_Init") }.unwrap();
-    let base_shutdown: libloading::Symbol<BaseShutdownFn> = unsafe { lib.get(b"Base_Shutdown") }.unwrap();
-    let dcm_process: libloading::Symbol<DcmProcessFn> = unsafe { lib.get(b"Dcm_ProcessRequest") }.unwrap();
+    let base_shutdown: libloading::Symbol<BaseShutdownFn> =
+        unsafe { lib.get(b"Base_Shutdown") }.unwrap();
+    let dcm_process: libloading::Symbol<DcmProcessFn> =
+        unsafe { lib.get(b"Dcm_ProcessRequest") }.unwrap();
 
     let mut shm = [0u8; 256];
     let ctx = build_ctx(&mut shm);
@@ -262,12 +344,17 @@ fn diag_dtc_lifecycle() {
     let lib = unsafe { libloading::Library::new(&lib_path) }.unwrap();
 
     let base_init: libloading::Symbol<BaseInitFn> = unsafe { lib.get(b"Base_Init") }.unwrap();
-    let base_shutdown: libloading::Symbol<BaseShutdownFn> = unsafe { lib.get(b"Base_Shutdown") }.unwrap();
-    let dem_report: libloading::Symbol<DemReportFn> = unsafe { lib.get(b"Dem_ReportErrorStatus") }.unwrap();
-    let dem_status: libloading::Symbol<DemGetStatusFn> = unsafe { lib.get(b"Dem_GetDTCStatus") }.unwrap();
+    let base_shutdown: libloading::Symbol<BaseShutdownFn> =
+        unsafe { lib.get(b"Base_Shutdown") }.unwrap();
+    let dem_report: libloading::Symbol<DemReportFn> =
+        unsafe { lib.get(b"Dem_ReportErrorStatus") }.unwrap();
+    let dem_status: libloading::Symbol<DemGetStatusFn> =
+        unsafe { lib.get(b"Dem_GetDTCStatus") }.unwrap();
     let _dem_clear: libloading::Symbol<DemClearFn> = unsafe { lib.get(b"Dem_ClearDTC") }.unwrap();
-    let dem_count: libloading::Symbol<DemCountFn> = unsafe { lib.get(b"Dem_GetNumberOfDTCByStatusMask") }.unwrap();
-    let dcm_process: libloading::Symbol<DcmProcessFn> = unsafe { lib.get(b"Dcm_ProcessRequest") }.unwrap();
+    let dem_count: libloading::Symbol<DemCountFn> =
+        unsafe { lib.get(b"Dem_GetNumberOfDTCByStatusMask") }.unwrap();
+    let dcm_process: libloading::Symbol<DcmProcessFn> =
+        unsafe { lib.get(b"Dcm_ProcessRequest") }.unwrap();
 
     let mut shm = [0u8; 256];
     let ctx = build_ctx(&mut shm);
@@ -319,9 +406,12 @@ fn diag_nvm_direct_read_write() {
     let lib = unsafe { libloading::Library::new(&lib_path) }.unwrap();
 
     let base_init: libloading::Symbol<BaseInitFn> = unsafe { lib.get(b"Base_Init") }.unwrap();
-    let base_shutdown: libloading::Symbol<BaseShutdownFn> = unsafe { lib.get(b"Base_Shutdown") }.unwrap();
-    let nvm_write: libloading::Symbol<NvmWriteBlockFn> = unsafe { lib.get(b"NvM_WriteBlock") }.unwrap();
-    let nvm_read: libloading::Symbol<NvmReadBlockFn> = unsafe { lib.get(b"NvM_ReadBlock") }.unwrap();
+    let base_shutdown: libloading::Symbol<BaseShutdownFn> =
+        unsafe { lib.get(b"Base_Shutdown") }.unwrap();
+    let nvm_write: libloading::Symbol<NvmWriteBlockFn> =
+        unsafe { lib.get(b"NvM_WriteBlock") }.unwrap();
+    let nvm_read: libloading::Symbol<NvmReadBlockFn> =
+        unsafe { lib.get(b"NvM_ReadBlock") }.unwrap();
 
     let mut shm = [0u8; 256];
     let ctx = build_ctx(&mut shm);
@@ -353,8 +443,10 @@ fn diag_session_timeout_nrc() {
     let lib = unsafe { libloading::Library::new(&lib_path) }.unwrap();
 
     let base_init: libloading::Symbol<BaseInitFn> = unsafe { lib.get(b"Base_Init") }.unwrap();
-    let base_shutdown: libloading::Symbol<BaseShutdownFn> = unsafe { lib.get(b"Base_Shutdown") }.unwrap();
-    let dcm_process: libloading::Symbol<DcmProcessFn> = unsafe { lib.get(b"Dcm_ProcessRequest") }.unwrap();
+    let base_shutdown: libloading::Symbol<BaseShutdownFn> =
+        unsafe { lib.get(b"Base_Shutdown") }.unwrap();
+    let dcm_process: libloading::Symbol<DcmProcessFn> =
+        unsafe { lib.get(b"Dcm_ProcessRequest") }.unwrap();
 
     let mut shm = [0u8; 256];
     let ctx = build_ctx(&mut shm);

@@ -58,10 +58,7 @@ impl BridgeLoader {
     ///
     /// The loaded libraries must export the correct function signatures as
     /// defined in `vecu_base_context.h`.
-    pub(crate) unsafe fn load(
-        base_path: &Path,
-        appl_path: &Path,
-    ) -> Result<Self, BridgeError> {
+    pub(crate) unsafe fn load(base_path: &Path, appl_path: &Path) -> Result<Self, BridgeError> {
         let base_lib =
             unsafe { libloading::Library::new(base_path) }.map_err(|e| BridgeError::Load {
                 path: base_path.display().to_string(),
@@ -75,18 +72,22 @@ impl BridgeLoader {
             })?;
 
         let base_init: BaseInitFn = unsafe {
-            *base_lib.get(b"Base_Init\0").map_err(|e| BridgeError::Symbol {
-                lib: "base",
-                symbol: "Base_Init",
-                source: e,
-            })?
+            *base_lib
+                .get(b"Base_Init\0")
+                .map_err(|e| BridgeError::Symbol {
+                    lib: "base",
+                    symbol: "Base_Init",
+                    source: e,
+                })?
         };
         let base_step: BaseStepFn = unsafe {
-            *base_lib.get(b"Base_Step\0").map_err(|e| BridgeError::Symbol {
-                lib: "base",
-                symbol: "Base_Step",
-                source: e,
-            })?
+            *base_lib
+                .get(b"Base_Step\0")
+                .map_err(|e| BridgeError::Symbol {
+                    lib: "base",
+                    symbol: "Base_Step",
+                    source: e,
+                })?
         };
         let base_shutdown: BaseShutdownFn = unsafe {
             *base_lib

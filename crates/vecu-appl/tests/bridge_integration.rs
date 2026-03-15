@@ -57,10 +57,7 @@ fn compile_mock_lib(name: &str, source: &str, out_dir: &std::path::Path) -> Path
     let lib_path = out_dir.join(format!("lib{name}.{}", dylib_ext()));
 
     let mut cmd = std::process::Command::new("cc");
-    cmd.arg("-shared")
-        .arg("-o")
-        .arg(&lib_path)
-        .arg(&src_path);
+    cmd.arg("-shared").arg("-o").arg(&lib_path).arg(&src_path);
 
     if cfg!(target_os = "macos") {
         cmd.arg("-dynamiclib");
@@ -75,7 +72,11 @@ fn compile_mock_lib(name: &str, source: &str, out_dir: &std::path::Path) -> Path
         String::from_utf8_lossy(&output.stderr)
     );
 
-    assert!(lib_path.exists(), "shared library not found: {}", lib_path.display());
+    assert!(
+        lib_path.exists(),
+        "shared library not found: {}",
+        lib_path.display()
+    );
     lib_path
 }
 

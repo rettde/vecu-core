@@ -304,8 +304,7 @@ pub struct VecuPluginApi {
     /// # Safety
     ///
     /// `key_data` must point to `key_len` readable bytes.
-    pub load_key:
-        Option<unsafe extern "C" fn(slot: u32, key_data: *const u8, key_len: u32) -> i32>,
+    pub load_key: Option<unsafe extern "C" fn(slot: u32, key_data: *const u8, key_len: u32) -> i32>,
     /// Generate cryptographically secure random bytes.
     ///
     /// # Safety

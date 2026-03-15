@@ -21,16 +21,13 @@ pub(crate) struct VecuBaseContext {
     pub pop_rx_frame: Option<unsafe extern "C" fn(*mut VecuFrame) -> i32>,
 
     // HSM crypto delegation
-    pub hsm_encrypt: Option<
-        unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32,
-    >,
-    pub hsm_decrypt: Option<
-        unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32,
-    >,
+    pub hsm_encrypt:
+        Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
+    pub hsm_decrypt:
+        Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
     pub hsm_generate_mac:
         Option<unsafe extern "C" fn(u32, *const u8, u32, *mut u8, *mut u32) -> i32>,
-    pub hsm_verify_mac:
-        Option<unsafe extern "C" fn(u32, *const u8, u32, *const u8, u32) -> i32>,
+    pub hsm_verify_mac: Option<unsafe extern "C" fn(u32, *const u8, u32, *const u8, u32) -> i32>,
     pub hsm_seed: Option<unsafe extern "C" fn(*mut u8, *mut u32) -> i32>,
     pub hsm_key: Option<unsafe extern "C" fn(*const u8, u32) -> i32>,
     pub hsm_rng: Option<unsafe extern "C" fn(*mut u8, u32) -> i32>,
@@ -111,11 +108,7 @@ impl VecuBaseContext {
     /// Build a new context from the current module state.
     ///
     /// The returned context is valid as long as the module is initialized.
-    pub(crate) fn build(
-        shm_vars: *mut u8,
-        shm_vars_size: u32,
-        tick_interval_us: u64,
-    ) -> Self {
+    pub(crate) fn build(shm_vars: *mut u8, shm_vars_size: u32, tick_interval_us: u64) -> Self {
         Self {
             push_tx_frame: Some(trampoline_push_tx),
             pop_rx_frame: Some(trampoline_pop_rx),

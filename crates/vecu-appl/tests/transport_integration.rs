@@ -28,16 +28,22 @@ type DcmGetSessionFn = unsafe extern "C" fn() -> u8;
 
 #[repr(C)]
 struct TestVecuFrame {
-    id: u32, len: u32, bus_type: u32, pad0: u32,
-    data: [u8; 1536], timestamp: u64,
+    id: u32,
+    len: u32,
+    bus_type: u32,
+    pad0: u32,
+    data: [u8; 1536],
+    timestamp: u64,
 }
 
 #[repr(C)]
 struct TestBaseContext {
     push_tx_frame: Option<unsafe extern "C" fn(*const TestVecuFrame) -> i32>,
     pop_rx_frame: Option<unsafe extern "C" fn(*mut TestVecuFrame) -> i32>,
-    hsm_encrypt: Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
-    hsm_decrypt: Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
+    hsm_encrypt:
+        Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
+    hsm_decrypt:
+        Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
     hsm_generate_mac: Option<unsafe extern "C" fn(u32, *const u8, u32, *mut u8, *mut u32) -> i32>,
     hsm_verify_mac: Option<unsafe extern "C" fn(u32, *const u8, u32, *const u8, u32) -> i32>,
     hsm_seed: Option<unsafe extern "C" fn(*mut u8, *mut u32) -> i32>,
@@ -68,7 +74,9 @@ unsafe extern "C" fn capture_push_tx(frame: *const TestVecuFrame) -> i32 {
     0 // VECU_OK
 }
 
-unsafe extern "C" fn noop_pop_rx(_: *mut TestVecuFrame) -> i32 { -4 }
+unsafe extern "C" fn noop_pop_rx(_: *mut TestVecuFrame) -> i32 {
+    -4
+}
 unsafe extern "C" fn noop_log(_: u32, _: *const std::ffi::c_char) {}
 
 // ---------------------------------------------------------------------------
@@ -76,44 +84,81 @@ unsafe extern "C" fn noop_log(_: u32, _: *const std::ffi::c_char) {}
 // ---------------------------------------------------------------------------
 
 fn dylib_ext() -> &'static str {
-    if cfg!(target_os = "macos") { "dylib" }
-    else if cfg!(target_os = "windows") { "dll" }
-    else { "so" }
+    if cfg!(target_os = "macos") {
+        "dylib"
+    } else if cfg!(target_os = "windows") {
+        "dll"
+    } else {
+        "so"
+    }
 }
 
 /// All `BaseLayer` source files (P3–P7).
 const ALL_SOURCES: &[&str] = &[
-    "Base_Entry.c", "EcuM.c", "SchM.c", "Os.c", "Det.c", "Rte.c",
-    "Com.c", "PduR.c", "CanIf.c", "EthIf.c", "LinIf.c", "FrIf.c",
-    "Cry.c", "CryIf.c", "Csm.c",
-    "NvM.c", "Fee.c", "MemIf.c", "Dem.c", "Dcm.c", "FiM.c", "WdgM.c",
-    "CanTp.c", "DoIP.c",
+    "Base_Entry.c",
+    "EcuM.c",
+    "SchM.c",
+    "Os.c",
+    "Det.c",
+    "Rte.c",
+    "Com.c",
+    "PduR.c",
+    "CanIf.c",
+    "EthIf.c",
+    "LinIf.c",
+    "FrIf.c",
+    "Cry.c",
+    "CryIf.c",
+    "Csm.c",
+    "NvM.c",
+    "Fee.c",
+    "MemIf.c",
+    "Dem.c",
+    "Dcm.c",
+    "FiM.c",
+    "WdgM.c",
+    "CanTp.c",
+    "DoIP.c",
 ];
 
 fn compile_baselayer(out_dir: &std::path::Path) -> PathBuf {
     let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap().parent().unwrap().to_path_buf();
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
     let baselayer_src = workspace.join("baselayer").join("src");
     let baselayer_inc = workspace.join("baselayer").join("include");
     let abi_inc = workspace.join("crates").join("vecu-abi").join("include");
 
-    let sources: Vec<PathBuf> = ALL_SOURCES.iter()
-        .map(|s| baselayer_src.join(s)).collect();
+    let sources: Vec<PathBuf> = ALL_SOURCES.iter().map(|s| baselayer_src.join(s)).collect();
 
     let lib_path = out_dir.join(format!("libbase_transport.{}", dylib_ext()));
 
     let mut cmd = std::process::Command::new("cc");
-    cmd.arg("-shared").arg("-std=c11").arg("-fPIC")
-        .arg("-I").arg(&baselayer_inc)
-        .arg("-I").arg(&abi_inc)
-        .arg("-o").arg(&lib_path);
-    if cfg!(target_os = "macos") { cmd.arg("-dynamiclib"); }
-    for src in &sources { cmd.arg(src); }
+    cmd.arg("-shared")
+        .arg("-std=c11")
+        .arg("-fPIC")
+        .arg("-I")
+        .arg(&baselayer_inc)
+        .arg("-I")
+        .arg(&abi_inc)
+        .arg("-o")
+        .arg(&lib_path);
+    if cfg!(target_os = "macos") {
+        cmd.arg("-dynamiclib");
+    }
+    for src in &sources {
+        cmd.arg(src);
+    }
 
     let output = cmd.output().expect("failed to run cc");
-    assert!(output.status.success(),
+    assert!(
+        output.status.success(),
         "`BaseLayer` compilation failed:\n{}",
-        String::from_utf8_lossy(&output.stderr));
+        String::from_utf8_lossy(&output.stderr)
+    );
     lib_path
 }
 
@@ -121,9 +166,13 @@ fn build_ctx(shm: &mut [u8]) -> TestBaseContext {
     TestBaseContext {
         push_tx_frame: Some(capture_push_tx),
         pop_rx_frame: Some(noop_pop_rx),
-        hsm_encrypt: None, hsm_decrypt: None,
-        hsm_generate_mac: None, hsm_verify_mac: None,
-        hsm_seed: None, hsm_key: None, hsm_rng: None,
+        hsm_encrypt: None,
+        hsm_decrypt: None,
+        hsm_generate_mac: None,
+        hsm_verify_mac: None,
+        hsm_seed: None,
+        hsm_key: None,
+        hsm_rng: None,
         shm_vars: shm.as_mut_ptr(),
         #[allow(clippy::cast_possible_truncation)]
         shm_vars_size: shm.len() as u32,
@@ -146,8 +195,10 @@ fn cantp_single_frame_transmit() {
     let lib = unsafe { libloading::Library::new(&lib_path) }.unwrap();
 
     let base_init: libloading::Symbol<BaseInitFn> = unsafe { lib.get(b"Base_Init") }.unwrap();
-    let base_shutdown: libloading::Symbol<BaseShutdownFn> = unsafe { lib.get(b"Base_Shutdown") }.unwrap();
-    let cantp_transmit: libloading::Symbol<CanTpTransmitFn> = unsafe { lib.get(b"CanTp_Transmit") }.unwrap();
+    let base_shutdown: libloading::Symbol<BaseShutdownFn> =
+        unsafe { lib.get(b"Base_Shutdown") }.unwrap();
+    let cantp_transmit: libloading::Symbol<CanTpTransmitFn> =
+        unsafe { lib.get(b"CanTp_Transmit") }.unwrap();
 
     let mut shm = [0u8; 256];
     let ctx = build_ctx(&mut shm);
@@ -182,9 +233,11 @@ fn cantp_multi_frame_transmit_and_receive() {
     let lib = unsafe { libloading::Library::new(&lib_path) }.unwrap();
 
     let base_init: libloading::Symbol<BaseInitFn> = unsafe { lib.get(b"Base_Init") }.unwrap();
-    let base_shutdown: libloading::Symbol<BaseShutdownFn> = unsafe { lib.get(b"Base_Shutdown") }.unwrap();
+    let base_shutdown: libloading::Symbol<BaseShutdownFn> =
+        unsafe { lib.get(b"Base_Shutdown") }.unwrap();
     let base_step: libloading::Symbol<BaseStepFn> = unsafe { lib.get(b"Base_Step") }.unwrap();
-    let cantp_transmit: libloading::Symbol<CanTpTransmitFn> = unsafe { lib.get(b"CanTp_Transmit") }.unwrap();
+    let cantp_transmit: libloading::Symbol<CanTpTransmitFn> =
+        unsafe { lib.get(b"CanTp_Transmit") }.unwrap();
 
     let mut shm = [0u8; 256];
     let ctx = build_ctx(&mut shm);
@@ -215,7 +268,11 @@ fn cantp_multi_frame_transmit_and_receive() {
     // Should have FF + 2 CFs (6 bytes in FF + 7 in CF1 + 7 in CF2 = 20)
     let all_frames = TX_FRAMES.with(|tx| tx.borrow().clone());
     let tx_frames: Vec<_> = all_frames.iter().filter(|(fid, _)| *fid == 0x642).collect();
-    assert!(tx_frames.len() >= 3, "Expected FF + 2 CFs, got {}", tx_frames.len());
+    assert!(
+        tx_frames.len() >= 3,
+        "Expected FF + 2 CFs, got {}",
+        tx_frames.len()
+    );
 
     unsafe { (base_shutdown)() };
 }
@@ -229,8 +286,10 @@ fn cantp_rx_single_frame_reassembly() {
     let lib = unsafe { libloading::Library::new(&lib_path) }.unwrap();
 
     let base_init: libloading::Symbol<BaseInitFn> = unsafe { lib.get(b"Base_Init") }.unwrap();
-    let base_shutdown: libloading::Symbol<BaseShutdownFn> = unsafe { lib.get(b"Base_Shutdown") }.unwrap();
-    let cantp_rx: libloading::Symbol<CanTpRxIndicationFn> = unsafe { lib.get(b"CanTp_RxIndication") }.unwrap();
+    let base_shutdown: libloading::Symbol<BaseShutdownFn> =
+        unsafe { lib.get(b"Base_Shutdown") }.unwrap();
+    let cantp_rx: libloading::Symbol<CanTpRxIndicationFn> =
+        unsafe { lib.get(b"CanTp_RxIndication") }.unwrap();
 
     let mut shm = [0u8; 256];
     let ctx = build_ctx(&mut shm);
@@ -255,9 +314,12 @@ fn doip_routing_activation_and_diag_message() {
     let lib = unsafe { libloading::Library::new(&lib_path) }.unwrap();
 
     let base_init: libloading::Symbol<BaseInitFn> = unsafe { lib.get(b"Base_Init") }.unwrap();
-    let base_shutdown: libloading::Symbol<BaseShutdownFn> = unsafe { lib.get(b"Base_Shutdown") }.unwrap();
-    let doip_process: libloading::Symbol<DoIpProcessFn> = unsafe { lib.get(b"DoIP_ProcessPacket") }.unwrap();
-    let dcm_session: libloading::Symbol<DcmGetSessionFn> = unsafe { lib.get(b"Dcm_GetActiveSession") }.unwrap();
+    let base_shutdown: libloading::Symbol<BaseShutdownFn> =
+        unsafe { lib.get(b"Base_Shutdown") }.unwrap();
+    let doip_process: libloading::Symbol<DoIpProcessFn> =
+        unsafe { lib.get(b"DoIP_ProcessPacket") }.unwrap();
+    let dcm_session: libloading::Symbol<DcmGetSessionFn> =
+        unsafe { lib.get(b"Dcm_GetActiveSession") }.unwrap();
 
     let mut shm = [0u8; 256];
     let ctx = build_ctx(&mut shm);
@@ -266,10 +328,7 @@ fn doip_routing_activation_and_diag_message() {
     // 1. Routing Activation Request
     // DoIP header: version=0x02, ~ver=0xFD, type=0x0005, length=2
     // Payload: tester addr = 0x0E00
-    let ra_req: [u8; 10] = [
-        0x02, 0xFD, 0x00, 0x05, 0x00, 0x00, 0x00, 0x02,
-        0x0E, 0x00,
-    ];
+    let ra_req: [u8; 10] = [0x02, 0xFD, 0x00, 0x05, 0x00, 0x00, 0x00, 0x02, 0x0E, 0x00];
     let mut resp = [0u8; 256];
     let len = unsafe { (doip_process)(ra_req.as_ptr(), 10, resp.as_mut_ptr(), 256) };
     assert!(len > 0, "RA response should not be empty");
@@ -281,10 +340,9 @@ fn doip_routing_activation_and_diag_message() {
     // 2. Diagnostic message: DiagnosticSessionControl (0x10 0x03)
     // DoIP header: type=0x8001, payload = src(2) + tgt(2) + UDS
     let diag_req: [u8; 14] = [
-        0x02, 0xFD, 0x80, 0x01, 0x00, 0x00, 0x00, 0x06,
-        0x0E, 0x00,  // source addr
-        0x00, 0x01,  // target addr
-        0x10, 0x03,  // UDS: DiagnosticSessionControl Extended
+        0x02, 0xFD, 0x80, 0x01, 0x00, 0x00, 0x00, 0x06, 0x0E, 0x00, // source addr
+        0x00, 0x01, // target addr
+        0x10, 0x03, // UDS: DiagnosticSessionControl Extended
     ];
     let len = unsafe { (doip_process)(diag_req.as_ptr(), 14, resp.as_mut_ptr(), 256) };
     assert!(len > 0, "Diag response should not be empty");

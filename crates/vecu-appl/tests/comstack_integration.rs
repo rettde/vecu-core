@@ -40,8 +40,10 @@ struct TestVecuFrame {
 struct TestBaseContext {
     push_tx_frame: Option<unsafe extern "C" fn(*const TestVecuFrame) -> i32>,
     pop_rx_frame: Option<unsafe extern "C" fn(*mut TestVecuFrame) -> i32>,
-    hsm_encrypt: Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
-    hsm_decrypt: Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
+    hsm_encrypt:
+        Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
+    hsm_decrypt:
+        Option<unsafe extern "C" fn(u32, u32, *const u8, u32, *const u8, *mut u8, *mut u32) -> i32>,
     hsm_generate_mac: Option<unsafe extern "C" fn(u32, *const u8, u32, *mut u8, *mut u32) -> i32>,
     hsm_verify_mac: Option<unsafe extern "C" fn(u32, *const u8, u32, *const u8, u32) -> i32>,
     hsm_seed: Option<unsafe extern "C" fn(*mut u8, *mut u32) -> i32>,
@@ -62,7 +64,9 @@ static RX_FRAME: Mutex<Option<TestVecuFrame>> = Mutex::new(None);
 static TX_FRAME: Mutex<Option<TestVecuFrame>> = Mutex::new(None);
 
 unsafe extern "C" fn test_push_tx(frame: *const TestVecuFrame) -> i32 {
-    if frame.is_null() { return -2; }
+    if frame.is_null() {
+        return -2;
+    }
     let f = unsafe { &*frame };
     let mut copy = TestVecuFrame {
         id: f.id,
@@ -78,7 +82,9 @@ unsafe extern "C" fn test_push_tx(frame: *const TestVecuFrame) -> i32 {
 }
 
 unsafe extern "C" fn test_pop_rx(frame: *mut TestVecuFrame) -> i32 {
-    if frame.is_null() { return -2; }
+    if frame.is_null() {
+        return -2;
+    }
     let mut guard = RX_FRAME.lock().unwrap();
     if let Some(rx) = guard.take() {
         let out = unsafe { &mut *frame };
@@ -103,15 +109,21 @@ unsafe extern "C" fn test_log(_level: u32, _msg: *const std::ffi::c_char) {
 // ---------------------------------------------------------------------------
 
 fn dylib_ext() -> &'static str {
-    if cfg!(target_os = "macos") { "dylib" }
-    else if cfg!(target_os = "windows") { "dll" }
-    else { "so" }
+    if cfg!(target_os = "macos") {
+        "dylib"
+    } else if cfg!(target_os = "windows") {
+        "dll"
+    } else {
+        "so"
+    }
 }
 
 fn compile_baselayer(out_dir: &std::path::Path) -> PathBuf {
     let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap()
-        .parent().unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
         .to_path_buf();
 
     let baselayer_src = workspace.join("baselayer").join("src");
@@ -119,12 +131,34 @@ fn compile_baselayer(out_dir: &std::path::Path) -> PathBuf {
     let abi_inc = workspace.join("crates").join("vecu-abi").join("include");
 
     let sources: Vec<PathBuf> = [
-        "Base_Entry.c", "EcuM.c", "SchM.c", "Os.c", "Det.c", "Rte.c",
-        "Com.c", "PduR.c", "CanIf.c", "EthIf.c", "LinIf.c", "FrIf.c",
-        "Cry.c", "CryIf.c", "Csm.c",
-        "NvM.c", "Fee.c", "MemIf.c", "Dem.c", "Dcm.c", "FiM.c", "WdgM.c",
-        "CanTp.c", "DoIP.c",
-    ].iter().map(|s| baselayer_src.join(s)).collect();
+        "Base_Entry.c",
+        "EcuM.c",
+        "SchM.c",
+        "Os.c",
+        "Det.c",
+        "Rte.c",
+        "Com.c",
+        "PduR.c",
+        "CanIf.c",
+        "EthIf.c",
+        "LinIf.c",
+        "FrIf.c",
+        "Cry.c",
+        "CryIf.c",
+        "Csm.c",
+        "NvM.c",
+        "Fee.c",
+        "MemIf.c",
+        "Dem.c",
+        "Dcm.c",
+        "FiM.c",
+        "WdgM.c",
+        "CanTp.c",
+        "DoIP.c",
+    ]
+    .iter()
+    .map(|s| baselayer_src.join(s))
+    .collect();
 
     let lib_path = out_dir.join(format!("libbase_com.{}", dylib_ext()));
 
@@ -132,13 +166,20 @@ fn compile_baselayer(out_dir: &std::path::Path) -> PathBuf {
     cmd.arg("-shared")
         .arg("-std=c11")
         .arg("-fPIC")
-        .arg("-I").arg(&baselayer_inc)
-        .arg("-I").arg(&abi_inc)
-        .arg("-o").arg(&lib_path);
+        .arg("-I")
+        .arg(&baselayer_inc)
+        .arg("-I")
+        .arg(&abi_inc)
+        .arg("-o")
+        .arg(&lib_path);
 
-    if cfg!(target_os = "macos") { cmd.arg("-dynamiclib"); }
+    if cfg!(target_os = "macos") {
+        cmd.arg("-dynamiclib");
+    }
 
-    for src in &sources { cmd.arg(src); }
+    for src in &sources {
+        cmd.arg(src);
+    }
 
     let output = cmd.output().expect("failed to run cc");
     assert!(
@@ -147,7 +188,11 @@ fn compile_baselayer(out_dir: &std::path::Path) -> PathBuf {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    assert!(lib_path.exists(), "libbase_com not found: {}", lib_path.display());
+    assert!(
+        lib_path.exists(),
+        "libbase_com not found: {}",
+        lib_path.display()
+    );
     lib_path
 }
 
@@ -171,8 +216,7 @@ fn comstack_rx_signal_le_round_trip() {
     let lib_path = compile_baselayer(&out_dir);
 
     // Load the BaseLayer
-    let lib = unsafe { libloading::Library::new(&lib_path) }
-        .expect("failed to load BaseLayer");
+    let lib = unsafe { libloading::Library::new(&lib_path) }.expect("failed to load BaseLayer");
 
     // Resolve symbols
     let base_init: libloading::Symbol<BaseInitFn> =
@@ -208,9 +252,9 @@ fn comstack_rx_signal_le_round_trip() {
     // Inject RX CAN frame for PDU 0x100 with VehicleSpeed = 0x1234 (LE: [0x34, 0x12])
     {
         let mut frame = TestVecuFrame {
-            id: 0x100,      // PDU ID (CanIf passes frame.id as PduId)
+            id: 0x100, // PDU ID (CanIf passes frame.id as PduId)
             len: 8,
-            bus_type: 0,    // VECU_BUS_CAN
+            bus_type: 0, // VECU_BUS_CAN
             pad0: 0,
             data: [0u8; 1536],
             timestamp: 0,
@@ -226,17 +270,13 @@ fn comstack_rx_signal_le_round_trip() {
 
     // Read VehicleSpeed (signal 0)
     let mut value: u32 = 0;
-    let rc = unsafe {
-        (com_receive)(0, std::ptr::addr_of_mut!(value).cast::<u8>())
-    };
+    let rc = unsafe { (com_receive)(0, std::ptr::addr_of_mut!(value).cast::<u8>()) };
     assert_eq!(rc, 0, "Com_ReceiveSignal for VehicleSpeed failed");
     assert_eq!(value, 0x1234, "VehicleSpeed should be 0x1234 (LE)");
 
     // Read BrakeActive (signal 2, 1-bit at bit 16)
     let mut brake: u32 = 0;
-    let rc = unsafe {
-        (com_receive)(2, std::ptr::addr_of_mut!(brake).cast::<u8>())
-    };
+    let rc = unsafe { (com_receive)(2, std::ptr::addr_of_mut!(brake).cast::<u8>()) };
     assert_eq!(rc, 0, "Com_ReceiveSignal for BrakeActive failed");
     assert_eq!(brake, 1, "BrakeActive should be 1");
 
@@ -256,8 +296,7 @@ fn comstack_rx_signal_be_round_trip() {
     std::fs::create_dir_all(&out_dir).expect("create temp dir");
 
     let lib_path = compile_baselayer(&out_dir);
-    let lib = unsafe { libloading::Library::new(&lib_path) }
-        .expect("failed to load BaseLayer");
+    let lib = unsafe { libloading::Library::new(&lib_path) }.expect("failed to load BaseLayer");
 
     let base_init: libloading::Symbol<BaseInitFn> =
         unsafe { lib.get(b"Base_Init") }.expect("Base_Init");
@@ -271,10 +310,18 @@ fn comstack_rx_signal_be_round_trip() {
     let ctx = TestBaseContext {
         push_tx_frame: Some(test_push_tx),
         pop_rx_frame: Some(test_pop_rx),
-        hsm_encrypt: None, hsm_decrypt: None, hsm_generate_mac: None,
-        hsm_verify_mac: None, hsm_seed: None, hsm_key: None, hsm_rng: None,
-        shm_vars: std::ptr::null_mut(), shm_vars_size: 0, _pad0: 0,
-        log_fn: Some(test_log), tick_interval_us: 1000,
+        hsm_encrypt: None,
+        hsm_decrypt: None,
+        hsm_generate_mac: None,
+        hsm_verify_mac: None,
+        hsm_seed: None,
+        hsm_key: None,
+        hsm_rng: None,
+        shm_vars: std::ptr::null_mut(),
+        shm_vars_size: 0,
+        _pad0: 0,
+        log_fn: Some(test_log),
+        tick_interval_us: 1000,
     };
 
     unsafe { (base_init)(&ctx) };
@@ -322,9 +369,7 @@ fn comstack_rx_signal_be_round_trip() {
     unsafe { (base_step)(1) };
 
     let mut value: u32 = 0;
-    let rc = unsafe {
-        (com_receive)(1, std::ptr::addr_of_mut!(value).cast::<u8>())
-    };
+    let rc = unsafe { (com_receive)(1, std::ptr::addr_of_mut!(value).cast::<u8>()) };
     assert_eq!(rc, 0, "Com_ReceiveSignal for EngineRpm failed");
     assert_eq!(value, 0xABCD, "EngineRpm should be 0xABCD (BE)");
 
@@ -342,8 +387,7 @@ fn comstack_tx_signal_produces_frame() {
     std::fs::create_dir_all(&out_dir).expect("create temp dir");
 
     let lib_path = compile_baselayer(&out_dir);
-    let lib = unsafe { libloading::Library::new(&lib_path) }
-        .expect("failed to load BaseLayer");
+    let lib = unsafe { libloading::Library::new(&lib_path) }.expect("failed to load BaseLayer");
 
     let base_init: libloading::Symbol<BaseInitFn> =
         unsafe { lib.get(b"Base_Init") }.expect("Base_Init");
@@ -357,10 +401,18 @@ fn comstack_tx_signal_produces_frame() {
     let ctx = TestBaseContext {
         push_tx_frame: Some(test_push_tx),
         pop_rx_frame: Some(test_pop_rx),
-        hsm_encrypt: None, hsm_decrypt: None, hsm_generate_mac: None,
-        hsm_verify_mac: None, hsm_seed: None, hsm_key: None, hsm_rng: None,
-        shm_vars: std::ptr::null_mut(), shm_vars_size: 0, _pad0: 0,
-        log_fn: Some(test_log), tick_interval_us: 1000,
+        hsm_encrypt: None,
+        hsm_decrypt: None,
+        hsm_generate_mac: None,
+        hsm_verify_mac: None,
+        hsm_seed: None,
+        hsm_key: None,
+        hsm_rng: None,
+        shm_vars: std::ptr::null_mut(),
+        shm_vars_size: 0,
+        _pad0: 0,
+        log_fn: Some(test_log),
+        tick_interval_us: 1000,
     };
 
     // Clear TX
@@ -371,9 +423,7 @@ fn comstack_tx_signal_produces_frame() {
 
     // Send TxSignal (signal 3, 8-bit LE at bit 0 of PDU 0x200, TX)
     let value: u8 = 0x42;
-    let rc = unsafe {
-        (com_send)(3, std::ptr::addr_of!(value))
-    };
+    let rc = unsafe { (com_send)(3, std::ptr::addr_of!(value)) };
     assert_eq!(rc, 0, "Com_SendSignal for TxSignal failed");
 
     // Step triggers Com_MainFunction -> PduR -> CanIf -> push_tx_frame
@@ -381,7 +431,9 @@ fn comstack_tx_signal_produces_frame() {
 
     // Verify push_tx_frame received the correct frame
     let guard = TX_FRAME.lock().unwrap();
-    let tx = guard.as_ref().expect("push_tx_frame should have been called");
+    let tx = guard
+        .as_ref()
+        .expect("push_tx_frame should have been called");
     assert_eq!(tx.id, 0x200, "TX frame ID should be PDU ID 0x200");
     assert_eq!(tx.bus_type, 0, "TX frame should be CAN");
     assert_eq!(tx.data[0], 0x42, "TX frame data[0] should be 0x42");

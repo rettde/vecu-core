@@ -45,12 +45,10 @@ static BRIDGE: Mutex<Option<bridge::BridgeLoader>> = Mutex::new(None);
 static BRIDGE_CTX: Mutex<Option<Box<context::VecuBaseContext>>> = Mutex::new(None);
 
 /// Stored loader log function pointer (used by context trampolines).
-static BRIDGE_LOG_FN: AtomicPtr<core::ffi::c_void> =
-    AtomicPtr::new(core::ptr::null_mut());
+static BRIDGE_LOG_FN: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::null_mut());
 
 /// Tick interval from the runtime context (used by context builder).
-static TICK_INTERVAL_US: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(1000);
+static TICK_INTERVAL_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1000);
 
 // ---------------------------------------------------------------------------
 // Bridge mode helpers

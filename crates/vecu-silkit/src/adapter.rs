@@ -2,10 +2,10 @@
 //!
 //! The adapter registers as a **SIL Kit participant**, creates a lifecycle
 //! service with virtual time synchronisation, and maps CAN frame I/O
-//! between the SIL Kit bus and the vECU runtime via [`OpenSutApi`].
+//! between the SIL Kit bus and the vECU runtime via `OpenSutApi`.
 //!
-//! Frame routing is delegated to [`SilKitBus`](crate::bus::SilKitBus),
-//! which implements [`OpenSutApi`] and is set on the [`Runtime`] before
+//! Frame routing is delegated to [`SilKitBus`],
+//! which implements `OpenSutApi` and is set on the `Runtime` before
 //! the lifecycle starts.
 
 use std::ffi::{c_void, CString};

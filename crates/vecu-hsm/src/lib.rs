@@ -23,10 +23,10 @@ use rand::RngCore;
 use zeroize::Zeroize;
 
 use vecu_abi::{
-    status, DiagMailbox, ModuleKind, VecuPluginApi, VecuRuntimeContext, VecuShmHeader,
-    ABI_VERSION, AES128_BLOCK_SIZE, AES128_CMAC_SIZE, AES128_KEY_SIZE, CAP_DIAGNOSTICS,
-    CAP_HSM_ENCRYPT, CAP_HSM_RNG, CAP_HSM_SEED_KEY, CAP_SIGN_VERIFY, HSM_BUF_SIZE,
-    SHE_MODE_CBC, SHE_MODE_ECB, SHE_NUM_KEY_SLOTS,
+    status, DiagMailbox, ModuleKind, VecuPluginApi, VecuRuntimeContext, VecuShmHeader, ABI_VERSION,
+    AES128_BLOCK_SIZE, AES128_CMAC_SIZE, AES128_KEY_SIZE, CAP_DIAGNOSTICS, CAP_HSM_ENCRYPT,
+    CAP_HSM_RNG, CAP_HSM_SEED_KEY, CAP_SIGN_VERIFY, HSM_BUF_SIZE, SHE_MODE_CBC, SHE_MODE_ECB,
+    SHE_NUM_KEY_SLOTS,
 };
 
 // ---------------------------------------------------------------------------
@@ -39,8 +39,7 @@ pub const DIAG_REQ_SEED_KEY: u32 = 0x27_01;
 /// Default master key (slot 0) — used for `SecurityAccess` CMAC.
 /// In production this would be provisioned securely.
 const DEFAULT_MASTER_KEY: [u8; AES128_KEY_SIZE] = [
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
-    0x0F,
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
 ];
 
 /// Key slot index used for `SecurityAccess` (seed/key).
@@ -58,10 +57,7 @@ const _: () = assert!(
     SEED_LEN <= vecu_abi::DIAG_DATA_SIZE,
     "seed must fit in diagnostic mailbox data area"
 );
-const _: () = assert!(
-    SEED_LEN <= HSM_BUF_SIZE,
-    "seed must fit in HSM buffer"
-);
+const _: () = assert!(SEED_LEN <= HSM_BUF_SIZE, "seed must fit in HSM buffer");
 const _: () = assert!(
     AES128_CMAC_SIZE <= HSM_BUF_SIZE,
     "CMAC tag must fit in HSM buffer"
@@ -1142,9 +1138,8 @@ mod tests {
         assert_eq!(mac_len as usize, AES128_CMAC_SIZE);
 
         #[allow(unsafe_code)]
-        let rc = unsafe {
-            hsm_verify_mac(0, data.as_ptr(), data.len() as u32, mac.as_ptr(), mac_len)
-        };
+        let rc =
+            unsafe { hsm_verify_mac(0, data.as_ptr(), data.len() as u32, mac.as_ptr(), mac_len) };
         assert_eq!(rc, status::OK);
     }
 
@@ -1193,8 +1188,7 @@ mod tests {
         assert_eq!(sig_len as usize, AES128_CMAC_SIZE);
 
         #[allow(unsafe_code)]
-        let rc =
-            unsafe { hsm_verify(data.as_ptr(), data.len() as u32, sig.as_ptr(), sig_len) };
+        let rc = unsafe { hsm_verify(data.as_ptr(), data.len() as u32, sig.as_ptr(), sig_len) };
         assert_eq!(rc, status::OK);
     }
 
@@ -1228,9 +1222,7 @@ mod tests {
 
         let custom_key = [0xFFu8; AES128_KEY_SIZE];
         #[allow(unsafe_code)]
-        let rc = unsafe {
-            hsm_load_key(5, custom_key.as_ptr(), AES128_KEY_SIZE as u32)
-        };
+        let rc = unsafe { hsm_load_key(5, custom_key.as_ptr(), AES128_KEY_SIZE as u32) };
         assert_eq!(rc, status::OK);
 
         // Encrypt with the custom key (slot 5).
