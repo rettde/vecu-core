@@ -921,7 +921,7 @@ All levels:
 - Are tool‑free
 - Are platform‑neutral
 - Are deterministic
-- Conform exactly to ADR‑001 through ADR‑003
+- Conform exactly to ADR‑001 through ADR‑005
 
 ---
 
@@ -1046,6 +1046,502 @@ for each simulation tick:
 
 ---
 
+## ADR‑005: APPL Module with External C‑Code and AUTOSAR BaseLayer
+
+**(VTT‑equivalent SiL coverage, runtime‑linked BaseLayer, no proprietary toolchain)**
+
+**Status:** Proposed
+
+**Reference:** This ADR extends ADR‑002 (APPL Module) and depends on:
+
+- ADR‑001: vECU Loader ABI
+- ADR‑002: APPL & HSM Module Roles
+- ADR‑003: Shared Memory Layout
+- ADR‑004: OpenSUT API Abstraction
+
+### Context
+
+ADR‑002 defines the APPL module as a **logical role** for ECU application logic.
+The current reference implementation is a pure‑Rust echo stub. For production
+use, the APPL module must execute **real ECU application C‑code** — the same
+source code that runs on the target microcontroller (e.g. Infineon TC4x,
+Renesas RH850).
+
+This is the standard approach for Software‑in‑the‑Loop (SiL) testing:
+
+- **Vector VTT** re‑compiles ECU C‑code for Windows x86/x64 and links it
+  against VTT‑proprietary BSW stubs to produce `appl.dll`.
+- **Synopsys Silver** / **dSPACE VEOS** follow similar patterns.
+
+Our goal: **same functional coverage as VTT `appl.dll`**, but:
+
+- Cross‑platform (Windows, Linux, macOS)
+- No proprietary toolchain dependency
+- BaseLayer as a runtime‑linked shared library (exchangeable per project)
+- Full integration with our HSM module for crypto delegation
+
+### Decision
+
+The APPL module is split into three layers, loaded at runtime:
+
+1. **vECU APPL Bridge** (`vecu-appl`, Rust) — the ABI‑compliant wrapper that
+   implements `vecu_get_api()` and delegates to the C‑code layers below.
+2. **BaseLayer** (`libbase.so` / `base.dll`) — AUTOSAR BSW stubs compiled for
+   the host platform. Provides the BSW API surface that the ECU application
+   code expects. Supplied once per AUTOSAR release, reusable across projects.
+3. **Application Code** (`libappl_ecu.so` / `appl_ecu.dll`) — the actual ECU
+   C/C++ source code, compiled for the host platform and linked against the
+   BaseLayer.
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│  vECU Loader (Rust)                                      │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  vecu-appl  (Rust, cdylib)                         │  │
+│  │  ┌──────────────────────────────────────────────┐  │  │
+│  │  │  ABI Bridge                                  │  │  │
+│  │  │  vecu_get_api() → init / step / shutdown     │  │  │
+│  │  │  push_frame()   → Com_RxIndication()         │  │  │
+│  │  │  poll_frame()   ← Com_TriggerTransmit()      │  │  │
+│  │  └──────────────┬───────────────────────────────┘  │  │
+│  │                 │ dlopen + callback injection       │  │
+│  │  ┌──────────────▼───────────────────────────────┐  │  │
+│  │  │  libbase.so  (C, AUTOSAR BSW Stubs)          │  │  │
+│  │  │  Os │ Com │ Dcm │ Csm │ NvM │ Det │ ...     │  │  │
+│  │  └──────────────┬───────────────────────────────┘  │  │
+│  │                 │ links against (compile‑time)      │  │
+│  │  ┌──────────────▼───────────────────────────────┐  │  │
+│  │  │  libappl_ecu.so  (C/C++, ECU Application)    │  │  │
+│  │  │  SWC Runnables │ RTE │ Application Logic     │  │  │
+│  │  └──────────────────────────────────────────────┘  │  │
+│  └────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────┘
+```
+
+**The BaseLayer is runtime‑linked, not compiled into vecu‑appl.**
+
+### AUTOSAR BSW Module Coverage (VTT‑Equivalent)
+
+The BaseLayer must provide stubs or functional implementations for the
+following AUTOSAR Classic BSW modules. This is the minimum set required
+to achieve VTT `appl.dll`‑equivalent coverage.
+
+#### System Services
+
+| BSW Module | AUTOSAR Role | BaseLayer Implementation |
+|------------|-------------|--------------------------|
+| **EcuM** | ECU State Manager | Maps vECU lifecycle (`init`/`step`/`shutdown`) to AUTOSAR states (STARTUP → RUN → SHUTDOWN). Calls `EcuM_Init()`, `EcuM_MainFunction()`. |
+| **BswM** | BSW Mode Manager | Rule‑based mode arbitration. Stub with configurable mode rules. |
+| **SchM** | Schedule Manager | Maps to our `step(tick)`. Drives `*_MainFunction()` calls for all BSW modules in deterministic order. |
+| **Os** | Operating System | Task activation, alarm management, counters. Single‑threaded emulation — all tasks run sequentially within `step()`. No real OS scheduling. |
+| **Det** | Default Error Tracer | Routes `Det_ReportError()` → `vecu_log_fn` callback from `VecuRuntimeContext`. |
+
+#### Communication
+
+| BSW Module | AUTOSAR Role | BaseLayer Implementation |
+|------------|-------------|--------------------------|
+| **Com** | Communication | Signal‑based I/O. `Com_SendSignal()` packs signals into PDUs. `Com_ReceiveSignal()` unpacks PDUs into signals. Signal database loaded from configuration (JSON/ARXML‑extract). |
+| **PduR** | PDU Router | Routes PDUs between Com, Dcm, CanTp, DoIP. Routing table from configuration. |
+| **CanIf** | CAN Interface | Maps to `push_frame()` / `poll_frame()` with `BusType::Can`. |
+| **LinIf** | LIN Interface | Maps to `push_frame()` / `poll_frame()` with `BusType::Lin`. |
+| **EthIf** | Ethernet Interface | Maps to `push_frame()` / `poll_frame()` with `BusType::Eth`. |
+| **FrIf** | FlexRay Interface | Maps to `push_frame()` / `poll_frame()` with `BusType::FlexRay`. |
+| **CanTp** | CAN Transport | ISO 15765‑2 segmentation and reassembly for UDS over CAN. |
+| **DoIP** | Diagnostics over IP | ISO 13400 transport for UDS over Ethernet. |
+
+#### Diagnostics
+
+| BSW Module | AUTOSAR Role | BaseLayer Implementation |
+|------------|-------------|--------------------------|
+| **Dcm** | Diagnostic Communication Manager | UDS service dispatch (ISO 14229). Handles session management, service routing, response assembly. |
+| **Dem** | Diagnostic Event Manager | DTC storage, status management, snapshot/extended data. DTCs stored in SHM variable block or NvM. |
+| **FiM** | Function Inhibition Manager | Inhibits SWC functions based on DTC status from Dem. |
+
+#### Crypto (delegation to HSM)
+
+| BSW Module | AUTOSAR Role | BaseLayer Implementation |
+|------------|-------------|--------------------------|
+| **Csm** | Crypto Service Manager | Delegates all operations to HSM module via callback injection: `Csm_Encrypt()` → `ctx.hsm_encrypt()`, `Csm_MacGenerate()` → `ctx.hsm_generate_mac()`, `Csm_RandomGenerate()` → `ctx.hsm_rng()`. |
+| **CryIf** | Crypto Interface | Thin routing layer between Csm and Cry driver (our HSM). |
+| **Cry** | Crypto Driver | Direct HSM callback wrappers. |
+
+#### Memory
+
+| BSW Module | AUTOSAR Role | BaseLayer Implementation |
+|------------|-------------|--------------------------|
+| **NvM** | NV Memory Manager | Block‑based read/write. Backed by SHM variable block (`off_vars`) or optional file persistence. `NvM_ReadBlock()` / `NvM_WriteBlock()` / `NvM_MainFunction()`. |
+| **MemIf** | Memory Abstraction | Routes NvM requests to Fee or Ea. |
+| **Fee** | Flash EEPROM Emulation | Emulated in RAM (SHM vars block) or backed by host file. |
+
+#### Watchdog
+
+| BSW Module | AUTOSAR Role | BaseLayer Implementation |
+|------------|-------------|--------------------------|
+| **WdgM** | Watchdog Manager | Alive supervision. Monitors checkpoint sequences from SWCs. Reports to Det on timeout. No real hardware watchdog — purely logical. |
+
+#### Runtime Environment
+
+| BSW Module | AUTOSAR Role | BaseLayer Implementation |
+|------------|-------------|--------------------------|
+| **Rte** | Runtime Environment | Connects SWC ports to BSW services. `Rte_Read_*()` / `Rte_Write_*()` map to Com signal accessors. `Rte_Call_*()` maps to Csm/Dcm service calls. Generated per‑project from SWC descriptions. |
+
+### Callback Injection (BaseLayer ↔ vECU Runtime)
+
+The BaseLayer cannot call our Rust ABI directly. Instead, `vecu-appl`
+injects a **callback context** struct during initialization. This is the
+sole coupling point between the C BaseLayer and the vECU runtime.
+
+```c
+/* vecu_base_context.h — shipped with vecu-abi */
+
+#ifndef VECU_BASE_CONTEXT_H
+#define VECU_BASE_CONTEXT_H
+
+#include <stdint.h>
+
+typedef struct vecu_frame_t vecu_frame_t;  /* from vecu-abi */
+
+typedef struct vecu_base_context_t {
+    /* ── Frame I/O (BaseLayer → Loader) ─────────────────────── */
+    int (*push_tx_frame)(const vecu_frame_t* frame);
+    int (*pop_rx_frame)(vecu_frame_t* frame);
+
+    /* ── HSM Crypto Delegation ──────────────────────────────── */
+    int (*hsm_encrypt)(uint32_t slot, uint32_t mode,
+                       const uint8_t* data, uint32_t data_len,
+                       const uint8_t* iv,
+                       uint8_t* out, uint32_t* out_len);
+    int (*hsm_decrypt)(uint32_t slot, uint32_t mode,
+                       const uint8_t* data, uint32_t data_len,
+                       const uint8_t* iv,
+                       uint8_t* out, uint32_t* out_len);
+    int (*hsm_generate_mac)(uint32_t slot,
+                            const uint8_t* data, uint32_t data_len,
+                            uint8_t* out_mac, uint32_t* out_mac_len);
+    int (*hsm_verify_mac)(uint32_t slot,
+                          const uint8_t* data, uint32_t data_len,
+                          const uint8_t* mac, uint32_t mac_len);
+    int (*hsm_seed)(uint8_t* out_seed, uint32_t* out_len);
+    int (*hsm_key)(const uint8_t* key_buf, uint32_t key_len);
+    int (*hsm_rng)(uint8_t* out_buf, uint32_t buf_len);
+
+    /* ── Shared Memory ──────────────────────────────────────── */
+    void*    shm_vars;         /* pointer to SHM variable block    */
+    uint32_t shm_vars_size;    /* size of variable block in bytes  */
+
+    /* ── Logging ────────────────────────────────────────────── */
+    void (*log_fn)(uint32_t level, const char* msg);
+
+    /* ── Time ───────────────────────────────────────────────── */
+    uint64_t tick_interval_us; /* microseconds per tick            */
+} vecu_base_context_t;
+
+/* BaseLayer must export these symbols */
+void Base_Init(const vecu_base_context_t* ctx);
+void Base_Step(uint64_t tick);
+void Base_Shutdown(void);
+
+/* Application code must export these symbols */
+void Appl_Init(void);
+void Appl_MainFunction(void);  /* called each tick by SchM */
+void Appl_Shutdown(void);
+
+#endif /* VECU_BASE_CONTEXT_H */
+```
+
+**Rules:**
+
+- All callback pointers are set by `vecu-appl` before calling `Base_Init()`
+- The BaseLayer must **never** call OS APIs, allocate heap, or start threads
+- All memory comes from the vECU Loader (SHM, callback context)
+- The BaseLayer stores the context pointer internally for the duration of
+  `Base_Init()` through `Base_Shutdown()`
+
+### Lifecycle Mapping
+
+```text
+┌───────────────────────────────────────────────────────────────┐
+│ vECU Loader Lifecycle          AUTOSAR EcuM States            │
+│                                                               │
+│ vecu_get_api()                                                │
+│     │                                                         │
+│     ▼                                                         │
+│ appl_init(ctx)                                                │
+│     │── dlopen(libbase.so)                                    │
+│     │── dlopen(libappl_ecu.so)                                │
+│     │── Build vecu_base_context_t with callbacks              │
+│     │── Base_Init(ctx)        ──→  EcuM_Init()                │
+│     │       │── Os_Init()          │  ECUM_STATE_STARTUP      │
+│     │       │── Com_Init()         │                          │
+│     │       │── Dcm_Init()         │                          │
+│     │       │── NvM_Init()         │                          │
+│     │       │── Csm_Init()         │                          │
+│     │       └── ...                │                          │
+│     │── Appl_Init()           ──→  Rte_Start()                │
+│     │                              ECUM_STATE_APP_RUN         │
+│     ▼                                                         │
+│ appl_step(tick)  [repeated]                                   │
+│     │── SchM_MainFunction()   ──→  EcuM_MainFunction()        │
+│     │       │── Com_MainFunction()                            │
+│     │       │── Dcm_MainFunction()                            │
+│     │       │── NvM_MainFunction()                            │
+│     │       │── WdgM_MainFunction()                           │
+│     │       └── ...                                           │
+│     │── Appl_MainFunction()   ──→  SWC Runnables              │
+│     │                              (via Rte_Read / Rte_Write) │
+│     ▼                                                         │
+│ appl_shutdown()                                               │
+│     │── Appl_Shutdown()       ──→  Rte_Stop()                 │
+│     │── Base_Shutdown()       ──→  EcuM_GoSleep()             │
+│     │       │── NvM_WriteAll()     ECUM_STATE_SHUTDOWN        │
+│     │       │── Com_DeInit()                                  │
+│     │       └── Os_Shutdown()                                 │
+│     │── dlclose(libappl_ecu.so)                               │
+│     └── dlclose(libbase.so)                                   │
+└───────────────────────────────────────────────────────────────┘
+```
+
+### Frame I/O Mapping
+
+The BaseLayer interface modules (CanIf, LinIf, EthIf, FrIf) do **not**
+access hardware or OS sockets. They delegate to the callback context:
+
+```text
+ECU C‑Code                BaseLayer               vecu-appl
+──────────                ─────────               ─────────
+Com_SendSignal()
+  → Com packs PDU
+    → PduR routes
+      → CanIf_Transmit()
+        → ctx.push_tx_frame()  ─────→  poll_frame() to Loader
+
+push_frame() from Loader  ─────→  ctx.pop_rx_frame()
+  → CanIf_RxIndication()
+    → PduR routes
+      → Com_RxIndication()
+        → Rte_Read_*() returns updated signal
+```
+
+**All four bus types (CAN, LIN, Ethernet, FlexRay) follow this pattern.**
+
+The `BusType` field in `VecuFrame` determines routing to the correct
+interface module (CanIf, LinIf, EthIf, FrIf).
+
+### Diagnostic Integration (UDS via DiagMailbox + Direct HSM)
+
+Two parallel diagnostic paths exist:
+
+#### Path A: Full Dcm Stack (production‑equivalent)
+
+```text
+CAN/DoIP Frame (UDS Request)
+  → CanTp / DoIP reassembly
+    → PduR → Dcm
+      → Dcm dispatches SID:
+          0x10 DiagnosticSessionControl  → Dcm internal
+          0x11 ECUReset                  → EcuM
+          0x22 ReadDataByIdentifier      → Rte / NvM
+          0x27 SecurityAccess            → Csm → ctx.hsm_seed() / ctx.hsm_key()
+          0x2E WriteDataByIdentifier     → Rte / NvM
+          0x31 RoutineControl            → SWC Runnables
+          0x34 RequestDownload           → Memory services
+          0x3E TesterPresent             → Dcm internal
+      → Dcm builds response PDU
+    → PduR → CanTp / DoIP
+  → ctx.push_tx_frame()
+```
+
+#### Path B: DiagMailbox Shortcut (simplified, existing)
+
+```text
+APPL writes DiagMailbox.request_pending = 1
+  → HSM.step() processes → DiagMailbox.response_ready = 1
+  → APPL reads response in same tick
+```
+
+Path A is the production‑equivalent path. Path B remains as a lightweight
+alternative for simple seed/key without full UDS framing.
+
+### Loader Configuration Extension
+
+The loader config (`config.yaml`) is extended with paths to the
+BaseLayer and application libraries:
+
+```yaml
+appl:
+  bridge: "target/release/libvecu_appl.dylib"   # Rust ABI bridge
+  base_layer: "vendor/libbase.so"                # AUTOSAR BSW stubs
+  ecu_code: "vendor/libappl_ecu.so"              # ECU application code
+  base_config: "vendor/base_config.json"         # BaseLayer configuration
+
+hsm:
+  path: "target/release/libvecu_hsm.dylib"
+
+shm:
+  queue_capacity: 64
+  vars_size: 65536                               # 64 KiB for NvM blocks
+```
+
+The `base_config.json` contains project‑specific configuration:
+
+- Com signal database (signal name → PDU ID, bit position, length, endianness)
+- PduR routing table
+- Dcm service configuration (supported SIDs, sub‑functions)
+- NvM block descriptors (block ID → offset in vars block, size)
+- DEM DTC configuration
+- EcuM / BswM mode rules
+
+### Build Pipeline
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│  Build Step 1: BaseLayer (once per AUTOSAR release)     │
+│                                                         │
+│  vecu_base_context.h                                    │
+│  + AUTOSAR BSW stub sources (.c/.h)                     │
+│  + base_config.json                                     │
+│     │                                                   │
+│     │  cc -shared -fPIC -o libbase.so                   │
+│     ▼                                                   │
+│  libbase.so / base.dll                                  │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│  Build Step 2: ECU Application (per project)            │
+│                                                         │
+│  ECU C/C++ sources (.c/.h)                              │
+│  + Generated RTE headers                                │
+│  + libbase.so (link dependency)                         │
+│     │                                                   │
+│     │  cc -shared -fPIC -lbase -o libappl_ecu.so        │
+│     ▼                                                   │
+│  libappl_ecu.so / appl_ecu.dll                          │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│  Build Step 3: vECU APPL Bridge (cargo build)           │
+│                                                         │
+│  vecu-appl crate (Rust)                                 │
+│     │                                                   │
+│     │  cargo build --release                            │
+│     ▼                                                   │
+│  libvecu_appl.so / vecu_appl.dll                        │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Key property:** Steps 1 and 3 are project‑independent. Only step 2
+changes per ECU project. This mirrors VTT's model where the VTT runtime
+is fixed and only the application code varies.
+
+### C4 Component Diagram (Updated APPL Module)
+
+```text
++----------------------------------------------------------------------+
+|                                                                      |
+|  APPL Module (ADR-005)                                               |
+|                                                                      |
+|  +--------------------------+                                        |
+|  | ABI Bridge (Rust)        |                                        |
+|  |--------------------------|                                        |
+|  | vecu_get_api()           |                                        |
+|  | init / step / shutdown   |                                        |
+|  | push_frame / poll_frame  |                                        |
+|  | dlopen(libbase, libappl) |                                        |
+|  +-----------+--------------+                                        |
+|              | vecu_base_context_t                                    |
+|              v                                                       |
+|  +--------------------------+     +-----------------------------+    |
+|  | BaseLayer (C)            |     | ECU Application (C/C++)     |    |
+|  |--------------------------|     |-----------------------------|    |
+|  | EcuM  BswM  SchM  Os    |     | SWC Runnables               |    |
+|  | Com   PduR  CanIf LinIf |     | Application State Machines  |    |
+|  | EthIf FrIf  CanTp DoIP  |<--->| Rte_Read / Rte_Write        |    |
+|  | Dcm   Dem   FiM         |     | Rte_Call (Csm, Dcm, ...)    |    |
+|  | NvM   Fee   MemIf       |     |                             |    |
+|  | Csm   CryIf Cry         |     +-----------------------------+    |
+|  | Det   WdgM              |                                        |
+|  +-----------+--------------+                                        |
+|              | ctx.hsm_*() callbacks                                 |
+|              v                                                       |
+|  +--------------------------+                                        |
+|  | HSM Module (vecu-hsm)    |                                        |
+|  |--------------------------|                                        |
+|  | AES-128 ECB/CBC          |                                        |
+|  | CMAC Generate/Verify     |                                        |
+|  | SecurityAccess           |                                        |
+|  | Key Store (20 slots)     |                                        |
+|  | CSPRNG                   |                                        |
+|  +--------------------------+                                        |
+|                                                                      |
++----------------------------------------------------------------------+
+```
+
+### Comparison with VTT
+
+| Aspect | Vector VTT | vecu‑core (ADR‑005) |
+|--------|-----------|----------------------|
+| **ECU C‑code** | Re‑compiled for Windows x86 | Re‑compiled for host (Win/Linux/macOS) |
+| **BSW Stubs** | VTT‑proprietary, closed source | Open BaseLayer, exchangeable per project |
+| **HSM** | VTT HSM stub (simplified) or re‑compiled firmware | Full SHE‑compatible HSM (ADR‑002, real AES‑128) |
+| **Bus Integration** | CANoe / VN hardware | OpenSutApi (SIL Kit, standalone, future HW) |
+| **Diagnostics** | Dcm from real BSW or VTT stub | Dcm in BaseLayer + DiagMailbox fallback |
+| **NvM** | File‑based emulation | SHM vars block + optional file persistence |
+| **Platform** | Windows only | Windows, Linux, macOS |
+| **Toolchain** | Visual Studio + VTT | gcc / clang / MSVC + cargo |
+| **License** | Proprietary (per seat) | Open‑source (MIT / Apache‑2.0) |
+| **Build model** | VTT project wizard | Makefile / CMake + cargo |
+
+### Constraints
+
+1. **No OS APIs in BaseLayer** — all I/O goes through callbacks
+2. **No threads** — everything runs within `step()`, deterministic
+3. **No heap allocation in BaseLayer** — use SHM vars block or
+   pre‑allocated buffers sized at compile time
+4. **C ABI only** — `extern "C"`, no C++ exceptions across boundaries
+5. **No direct APPL↔HSM calls** — crypto goes through callback context
+6. **BaseLayer must be stateless across ticks** — all persistent state
+   in SHM vars block (survives only within a simulation run) or NvM
+   file (survives across runs)
+7. **RTE is project‑specific** — must be generated or hand‑written per
+   ECU project to match SWC port definitions
+
+### Rejected Alternatives
+
+| Alternative | Reason |
+|-------------|--------|
+| Write all BSW stubs in Rust | Incompatible with existing C ECU code that expects AUTOSAR C headers |
+| Static linking of BaseLayer into vecu‑appl | Prevents exchanging BaseLayer without recompiling the bridge |
+| VTT binary compatibility | Creates proprietary lock‑in, Windows‑only |
+| Single monolithic DLL | Cannot reuse BaseLayer across projects |
+| Python/Lua scripting layer | Performance overhead, type safety loss, not compatible with real C code |
+| Direct function calls APPL→HSM | Breaks ADR‑002 encapsulation principle |
+
+### Implementation Roadmap
+
+| Phase | Deliverable | Description |
+|-------|-------------|-------------|
+| **P1** | `vecu_base_context.h` | C header defining the callback context — the contract between Rust bridge and C BaseLayer |
+| **P2** | `vecu-appl` FFI bridge | Rust code: `dlopen` + symbol resolution + callback injection + lifecycle delegation |
+| **P3** | Reference BaseLayer | Minimal C BaseLayer with EcuM, SchM, Os, Com, Det, Dcm stubs — proves the architecture |
+| **P4** | Crypto integration | Csm/CryIf/Cry stubs delegating to HSM callbacks — validates end‑to‑end SecurityAccess |
+| **P5** | NvM + Dem | Persistent storage via SHM vars block, DTC management |
+| **P6** | Transport layers | CanTp (ISO 15765‑2) and DoIP (ISO 13400) for segmented UDS |
+| **P7** | Example project | Complete integration with a sample ECU C‑code package |
+
+### Result
+
+The APPL module with external C‑code and runtime‑linked BaseLayer is defined as:
+
+> **A cross‑platform, VTT‑equivalent SiL execution environment that runs
+> real ECU application C‑code against AUTOSAR BSW stubs, with full HSM
+> crypto delegation, deterministic tick execution, and no proprietary
+> toolchain dependency.**
+
+In combination with ADR‑001 through ADR‑004, this completes the
+architecture for production‑grade vECU simulation.
+
+---
+
 ## Key Properties
 
 - Cross‑platform (Windows / Linux / macOS)
@@ -1072,9 +1568,10 @@ The vECU architecture cleanly separates:
 - execution (Runtime),
 - tick source (RuntimeAdapter),
 - bus I/O (OpenSutApi),
-- logic (APPL),
-- security (HSM),
-using a stable ABI, shared memory and two orthogonal trait abstractions.
+- logic (APPL + external C‑code + AUTOSAR BaseLayer),
+- security (HSM with SHE‑compatible crypto),
+using a stable ABI, shared memory, two orthogonal trait abstractions,
+and runtime‑linked BaseLayer for VTT‑equivalent SiL coverage.
 
 This enables scalable, license‑free and reproducible vECU execution
 across standalone, SIL Kit co‑simulation and future hardware backends.
