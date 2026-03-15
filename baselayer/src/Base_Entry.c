@@ -13,6 +13,9 @@
 #include "EcuM.h"
 #include "Os.h"
 #include "Com.h"
+#include "NvM.h"
+#include "Dem.h"
+#include "Dcm.h"
 
 /* ── Stored context ─────────────────────────────────────────────── */
 
@@ -103,11 +106,67 @@ static const Com_ConfigType g_default_com_config = {
     .num_pdus    = sizeof(g_default_pdus) / sizeof(g_default_pdus[0]),
 };
 
+/* ── Default NvM configuration (hardcoded for P6) ──────────────── */
+
+/* Example NvM blocks — DID 0xF190 (VIN) at SHM offset 0, 17 bytes.
+ * Block 1: generic 4-byte data block at offset 32. */
+static const NvM_BlockDescriptorType g_default_nvm_blocks[] = {
+    { .blockId = 0, .length = 17, .shmOffset = 0,  ._pad = 0 },  /* VIN */
+    { .blockId = 1, .length = 4,  .shmOffset = 32, ._pad = 0 },  /* Generic data */
+};
+
+static const NvM_ConfigType g_default_nvm_config = {
+    .blocks    = g_default_nvm_blocks,
+    .numBlocks = sizeof(g_default_nvm_blocks) / sizeof(g_default_nvm_blocks[0]),
+    ._pad      = 0,
+};
+
+/* ── Default Dcm configuration (hardcoded for P6) ──────────────── */
+
+/* DID 0xF190 = VIN (17 bytes) — reads from NvM block 0 */
+static Std_ReturnType did_f190_read(uint8* data, uint16* length) {
+    *length = 17;
+    return NvM_ReadBlock(0, data);
+}
+
+static Std_ReturnType did_f190_write(const uint8* data, uint16 length) {
+    (void)length;
+    return NvM_WriteBlock(0, data);
+}
+
+/* DID 0xF101 = generic 4-byte block — reads from NvM block 1 */
+static Std_ReturnType did_f101_read(uint8* data, uint16* length) {
+    *length = 4;
+    return NvM_ReadBlock(1, data);
+}
+
+static Std_ReturnType did_f101_write(const uint8* data, uint16 length) {
+    (void)length;
+    return NvM_WriteBlock(1, data);
+}
+
+static const Dcm_DidEntryType g_default_dids[] = {
+    { .did = 0xF190u, .length = 17, .readFn = did_f190_read, .writeFn = did_f190_write },
+    { .did = 0xF101u, .length = 4,  .readFn = did_f101_read, .writeFn = did_f101_write },
+};
+
+static const Dcm_ConfigType g_default_dcm_config = {
+    .dids             = g_default_dids,
+    .numDids          = sizeof(g_default_dids) / sizeof(g_default_dids[0]),
+    .routines         = NULL,
+    .numRoutines      = 0,
+    .sessionTimeoutMs = 5000,
+    ._pad             = 0,
+};
+
 EXPORT void Base_Init(const vecu_base_context_t* ctx) {
     g_ctx = ctx;
     EcuM_Init();
-    /* Initialise Com with default signal database after EcuM
-     * (EcuM inits CanIf, PduR, etc. which Com depends on). */
+    /* Initialise modules that require configuration after EcuM. */
+    NvM_Init(&g_default_nvm_config);
+    NvM_ReadAll();
+    Dem_Init();
+    Dcm_Init(&g_default_dcm_config);
     Com_Init(&g_default_com_config);
 }
 

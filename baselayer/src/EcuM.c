@@ -18,6 +18,13 @@
 #include "Cry.h"
 #include "CryIf.h"
 #include "Csm.h"
+#include "Fee.h"
+#include "MemIf.h"
+#include "NvM.h"
+#include "Dem.h"
+#include "Dcm.h"
+#include "FiM.h"
+#include "WdgM.h"
 
 static EcuM_StateType g_state = ECUM_STATE_STARTUP;
 
@@ -35,6 +42,11 @@ void EcuM_Init(void) {
     Cry_Init();
     CryIf_Init();
     Csm_Init();
+    Fee_Init();
+    MemIf_Init();
+    /* NvM_Init, Dem_Init, Dcm_Init called externally with config — see Base_Init. */
+    FiM_Init();
+    WdgM_Init();
     /* Com_Init is called externally with config — see Base_Init. */
     SchM_Init();
 
@@ -55,6 +67,13 @@ void EcuM_GoSleep(void) {
 
     /* De-init in reverse order. */
     SchM_DeInit();
+    WdgM_DeInit();
+    FiM_DeInit();
+    Dcm_DeInit();
+    Dem_DeInit();
+    NvM_DeInit();
+    MemIf_DeInit();
+    Fee_DeInit();
     Csm_DeInit();
     CryIf_DeInit();
     Cry_DeInit();

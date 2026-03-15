@@ -10,6 +10,10 @@
 #include "CanIf.h"
 #include "Com.h"
 #include "Csm.h"
+#include "Dcm.h"
+#include "Dem.h"
+#include "NvM.h"
+#include "WdgM.h"
 #include <stddef.h>
 
 /* ── Internal state ─────────────────────────────────────────────── */
@@ -29,7 +33,10 @@ static const SchM_MainFunctionPtr g_main_functions[] = {
     CanIf_RxMainFunction,  /* Process inbound CAN frames first */
     Com_MainFunction,      /* Then handle signal TX/RX */
     Csm_MainFunction,      /* Crypto job processing */
-    /* Dcm_MainFunction,  — P6 */
+    Dcm_MainFunction,      /* Diagnostic session timeout */
+    Dem_MainFunction,      /* DTC aging / debouncing */
+    NvM_MainFunction,      /* NvM async job processing */
+    WdgM_MainFunction,     /* Alive supervision */
     NULL  /* sentinel */
 };
 

@@ -30,6 +30,13 @@ set(BASE_SOURCES
     src/Cry.c
     src/CryIf.c
     src/Csm.c
+    src/NvM.c
+    src/Fee.c
+    src/MemIf.c
+    src/Dem.c
+    src/Dcm.c
+    src/FiM.c
+    src/WdgM.c
 )
 
 # ── Shared library ───────────────────────────────────────────────────
