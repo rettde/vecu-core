@@ -15,6 +15,9 @@
 #include "FrIf.h"
 #include "PduR.h"
 #include "Com.h"
+#include "Cry.h"
+#include "CryIf.h"
+#include "Csm.h"
 
 static EcuM_StateType g_state = ECUM_STATE_STARTUP;
 
@@ -29,6 +32,9 @@ void EcuM_Init(void) {
     LinIf_Init();
     FrIf_Init();
     PduR_Init();
+    Cry_Init();
+    CryIf_Init();
+    Csm_Init();
     /* Com_Init is called externally with config — see Base_Init. */
     SchM_Init();
 
@@ -49,6 +55,9 @@ void EcuM_GoSleep(void) {
 
     /* De-init in reverse order. */
     SchM_DeInit();
+    Csm_DeInit();
+    CryIf_DeInit();
+    Cry_DeInit();
     Com_DeInit();
     PduR_DeInit();
     FrIf_DeInit();

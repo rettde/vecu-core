@@ -42,6 +42,9 @@ fn compile_baselayer(out_dir: &std::path::Path) -> PathBuf {
         "EthIf.c",
         "LinIf.c",
         "FrIf.c",
+        "Cry.c",
+        "CryIf.c",
+        "Csm.c",
     ]
     .iter()
     .map(|s| baselayer_src.join(s))

@@ -27,6 +27,9 @@ set(BASE_SOURCES
     src/EthIf.c
     src/LinIf.c
     src/FrIf.c
+    src/Cry.c
+    src/CryIf.c
+    src/Csm.c
 )
 
 # ── Shared library ───────────────────────────────────────────────────

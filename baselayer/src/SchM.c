@@ -9,6 +9,7 @@
 #include "SchM.h"
 #include "CanIf.h"
 #include "Com.h"
+#include "Csm.h"
 #include <stddef.h>
 
 /* ── Internal state ─────────────────────────────────────────────── */
@@ -27,7 +28,8 @@ typedef void (*SchM_MainFunctionPtr)(void);
 static const SchM_MainFunctionPtr g_main_functions[] = {
     CanIf_RxMainFunction,  /* Process inbound CAN frames first */
     Com_MainFunction,      /* Then handle signal TX/RX */
-    /* Dcm_MainFunction,  — P5 */
+    Csm_MainFunction,      /* Crypto job processing */
+    /* Dcm_MainFunction,  — P6 */
     NULL  /* sentinel */
 };
 

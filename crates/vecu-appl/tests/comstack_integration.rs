@@ -121,6 +121,7 @@ fn compile_baselayer(out_dir: &std::path::Path) -> PathBuf {
     let sources: Vec<PathBuf> = [
         "Base_Entry.c", "EcuM.c", "SchM.c", "Os.c", "Det.c", "Rte.c",
         "Com.c", "PduR.c", "CanIf.c", "EthIf.c", "LinIf.c", "FrIf.c",
+        "Cry.c", "CryIf.c", "Csm.c",
     ].iter().map(|s| baselayer_src.join(s)).collect();
 
     let lib_path = out_dir.join(format!("libbase_com.{}", dylib_ext()));
