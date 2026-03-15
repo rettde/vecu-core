@@ -194,6 +194,7 @@ fn compile_baselayer(out_dir: &std::path::Path) -> PathBuf {
         "Com.c", "PduR.c", "CanIf.c", "EthIf.c", "LinIf.c", "FrIf.c",
         "Cry.c", "CryIf.c", "Csm.c",
         "NvM.c", "Fee.c", "MemIf.c", "Dem.c", "Dcm.c", "FiM.c", "WdgM.c",
+        "CanTp.c", "DoIP.c",
     ].iter().map(|s| baselayer_src.join(s)).collect();
 
     let lib_path = out_dir.join(format!("libbase_crypto.{}", dylib_ext()));

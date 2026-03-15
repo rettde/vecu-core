@@ -25,6 +25,8 @@
 #include "Dcm.h"
 #include "FiM.h"
 #include "WdgM.h"
+#include "CanTp.h"
+#include "DoIP.h"
 
 static EcuM_StateType g_state = ECUM_STATE_STARTUP;
 
@@ -47,7 +49,8 @@ void EcuM_Init(void) {
     /* NvM_Init, Dem_Init, Dcm_Init called externally with config — see Base_Init. */
     FiM_Init();
     WdgM_Init();
-    /* Com_Init is called externally with config — see Base_Init. */
+    DoIP_Init();
+    /* CanTp_Init, Com_Init called externally with config — see Base_Init. */
     SchM_Init();
 
     /* Transition to RUN. */
@@ -68,6 +71,8 @@ void EcuM_GoSleep(void) {
     /* De-init in reverse order. */
     SchM_DeInit();
     WdgM_DeInit();
+    CanTp_DeInit();
+    DoIP_DeInit();
     FiM_DeInit();
     Dcm_DeInit();
     Dem_DeInit();

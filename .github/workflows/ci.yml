@@ -57,6 +57,17 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all -- --check
 
+  baselayer:
+    name: Build BaseLayer + Sample ECU
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -B build -S examples/sample_ecu
+      - run: cmake --build build
+
   doc:
     name: Documentation
     runs-on: ubuntu-latest

@@ -1,0 +1,25 @@
+# config.yaml — Loader configuration for the sample ECU.
+#
+# This file tells vecu-loader where to find the shared libraries
+# and how to configure the simulation.
+#
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+simulation:
+  tick_count: 1000
+  tick_interval_us: 1000
+
+shm:
+  size: 65536
+
+appl:
+  bridge: "target/debug/libvecu_appl.dylib"    # or .so / .dll
+  base_layer: "build/libbase.dylib"             # built by cmake
+  ecu_code: "build/libappl_ecu.dylib"           # built by cmake
+
+# Optional: SIL Kit integration
+# silkit:
+#   registry_uri: "silkit://localhost:8500"
+#   participant_name: "SampleEcu"
+#   can_network: "CAN1"
+#   can_controller: "CAN1_Ctrl"

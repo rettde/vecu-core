@@ -52,6 +52,8 @@ fn compile_baselayer(out_dir: &std::path::Path) -> PathBuf {
         "Dcm.c",
         "FiM.c",
         "WdgM.c",
+        "CanTp.c",
+        "DoIP.c",
     ]
     .iter()
     .map(|s| baselayer_src.join(s))

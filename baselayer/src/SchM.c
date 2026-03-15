@@ -14,6 +14,8 @@
 #include "Dem.h"
 #include "NvM.h"
 #include "WdgM.h"
+#include "CanTp.h"
+#include "DoIP.h"
 #include <stddef.h>
 
 /* ── Internal state ─────────────────────────────────────────────── */
@@ -37,6 +39,8 @@ static const SchM_MainFunctionPtr g_main_functions[] = {
     Dem_MainFunction,      /* DTC aging / debouncing */
     NvM_MainFunction,      /* NvM async job processing */
     WdgM_MainFunction,     /* Alive supervision */
+    CanTp_MainFunction,    /* ISO-TP CF transmission */
+    DoIP_MainFunction,     /* DoIP processing */
     NULL  /* sentinel */
 };
 

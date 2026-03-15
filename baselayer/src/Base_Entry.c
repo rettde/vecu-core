@@ -16,6 +16,7 @@
 #include "NvM.h"
 #include "Dem.h"
 #include "Dcm.h"
+#include "CanTp.h"
 
 /* ── Stored context ─────────────────────────────────────────────── */
 
@@ -168,6 +169,18 @@ EXPORT void Base_Init(const vecu_base_context_t* ctx) {
     Dem_Init();
     Dcm_Init(&g_default_dcm_config);
     Com_Init(&g_default_com_config);
+
+    /* Default CanTp channel: RX on 0x641, TX on 0x642, FC on 0x641 */
+    static const CanTp_ChannelConfigType g_cantp_channels[] = {
+        { .rxId = 0x641, .txId = 0x642, .fcId = 0x641,
+          .blockSize = 0, .stMin = 0, ._pad = 0 },
+    };
+    static const CanTp_ConfigType g_cantp_config = {
+        .channels    = g_cantp_channels,
+        .numChannels = sizeof(g_cantp_channels) / sizeof(g_cantp_channels[0]),
+        ._pad        = 0,
+    };
+    CanTp_Init(&g_cantp_config);
 }
 
 EXPORT void Base_Step(uint64_t tick) {
