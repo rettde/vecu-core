@@ -97,7 +97,7 @@ Com_SendSignal(SignalId, &value);
 /* (usually called via Rte_Call, not directly) */
 
 /* Crypto — delegated to HSM */
-Csm_Encrypt(jobId, CRYPTO_OPERATIONMODE_SINGLECALL, data, len, result, &resultLen);
+Csm_Encrypt(jobId, 0 /* ECB=0, CBC=1 */, data, len, result, &resultLen);
 Csm_MacGenerate(jobId, data, len, mac, &macLen);
 Csm_RandomGenerate(jobId, result, &resultLen);
 
@@ -193,7 +193,7 @@ Each SWC needs an RTE header:
 #include "Std_Types.h"
 #include "Com.h"
 
-/* Signal IDs — must match com_config.json */
+/* Signal IDs — must match Com_SignalConfigType in Base_Entry.c */
 #define Rte_SignalId_VehicleSpeed    0
 #define Rte_SignalId_DoorStatus      1
 #define Rte_SignalId_LightCommand    2
@@ -210,13 +210,12 @@ static inline Std_ReturnType Rte_Write_LightCommand(const uint8* value)
     return Com_SendSignal(Rte_SignalId_LightCommand, value);
 }
 
-/* Call crypto service */
+/* Call crypto service (mode: 0 = ECB, 1 = CBC) */
 static inline Std_ReturnType Rte_Call_Csm_Encrypt(
-    uint32 jobId, const uint8* data, uint32 len,
+    uint32 jobId, uint32 mode, const uint8* data, uint32 len,
     uint8* result, uint32* resultLen)
 {
-    return Csm_Encrypt(jobId, CRYPTO_OPERATIONMODE_SINGLECALL,
-                       data, len, result, resultLen);
+    return Csm_Encrypt(jobId, mode, data, len, result, resultLen);
 }
 
 #endif /* RTE_SWCBODYCTRL_H */
@@ -279,21 +278,17 @@ cmake --build .
 #   Windows: base.dll
 ```
 
-### BaseLayer Build Options
-
-| CMake Option | Default | Description |
-|-------------|---------|-------------|
-| `VECU_WITH_CANTP` | ON | Include ISO 15765‑2 transport layer |
-| `VECU_WITH_DOIP` | OFF | Include ISO 13400 transport layer |
-| `VECU_WITH_WDGM` | ON | Include watchdog manager |
-| `VECU_JSON_PARSER` | `builtin` | JSON parser for config (`builtin` or `cjson`) |
+All 24 BSW modules (EcuM, SchM, Os, Det, Com, PduR, CanIf, LinIf, EthIf,
+FrIf, Cry, CryIf, Csm, NvM, Fee, MemIf, Dem, Dcm, FiM, WdgM, CanTp, DoIP)
+are always compiled. There are no optional CMake flags.
 
 ---
 
 ## 5. Building the ECU Application Library
 
-Your ECU C‑code is compiled into a separate shared library that links
-against the BaseLayer.
+Your ECU C‑code is compiled into a separate shared library. It is
+**not** linked against the BaseLayer at build time — symbols are resolved
+at runtime when the loader loads both libraries into the same process.
 
 ### CMakeLists.txt (Template)
 
@@ -301,13 +296,17 @@ against the BaseLayer.
 cmake_minimum_required(VERSION 3.16)
 project(my_ecu_appl C)
 
-# Find the BaseLayer
-set(VECU_BASELAYER_DIR "${CMAKE_SOURCE_DIR}/../vecu-core/baselayer"
-    CACHE PATH "Path to BaseLayer source")
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Include BaseLayer headers (AUTOSAR BSW API)
+# Path to vecu‑core checkout
+set(VECU_CORE_DIR "${CMAKE_SOURCE_DIR}/../vecu-core"
+    CACHE PATH "Path to vecu-core repository")
+
+# Include BaseLayer headers (AUTOSAR BSW API) + ABI headers
 include_directories(
-    ${VECU_BASELAYER_DIR}/include
+    ${VECU_CORE_DIR}/baselayer/include
+    ${VECU_CORE_DIR}/crates/vecu-abi/include
     ${CMAKE_SOURCE_DIR}/include
 )
 
@@ -322,12 +321,11 @@ add_library(appl_ecu SHARED
 # SiL build flag — enables host‑compatible stubs
 target_compile_definitions(appl_ecu PRIVATE VECU_SIL)
 
-# Link against BaseLayer
-target_link_libraries(appl_ecu PRIVATE base)
-
 # Platform‑specific settings
-if(UNIX)
-    target_compile_options(appl_ecu PRIVATE -Wall -Wextra -fPIC)
+if(WIN32)
+    target_compile_definitions(appl_ecu PRIVATE BUILDING_DLL)
+else()
+    target_compile_options(appl_ecu PRIVATE -Wall -Wextra -fPIC -fvisibility=default)
 endif()
 ```
 
@@ -337,9 +335,9 @@ endif()
 cd my_ecu_project
 mkdir build && cd build
 
-# Point to the BaseLayer build
+# Point to the vecu-core checkout
 cmake .. -DCMAKE_BUILD_TYPE=Release \
-         -DVECU_BASELAYER_DIR=/path/to/vecu-core/baselayer
+         -DVECU_CORE_DIR=/path/to/vecu-core
 
 cmake --build .
 
@@ -360,193 +358,120 @@ This is the main configuration file for the vECU loader:
 ```yaml
 # config.yaml — vECU Loader Configuration
 
-appl:
-  # Rust ABI bridge (built by cargo)
-  bridge: "target/release/libvecu_appl.dylib"
-  # AUTOSAR BaseLayer
-  base_layer: "baselayer/build/libbase.dylib"
-  # Your ECU application code
-  ecu_code: "my_ecu_project/build/libappl_ecu.dylib"
-  # BaseLayer configuration
-  base_config: "my_ecu_project/base_config.json"
-
-hsm:
-  path: "target/release/libvecu_hsm.dylib"
+simulation:
+  tick_count: 10000        # 10 seconds of simulation
+  tick_interval_us: 1000   # 1 ms tick
 
 shm:
-  queue_capacity: 64
-  vars_size: 65536    # 64 KiB for NvM
+  size: 65536              # 64 KiB for NvM / queues
 
-simulation:
-  tick_interval_us: 1000   # 1 ms tick
-  tick_count: 10000        # 10 seconds of simulation
+appl:
+  bridge: "target/release/libvecu_appl.dylib"
+  base_layer: "baselayer/build/libbase.dylib"
+  ecu_code: "my_ecu_project/build/libappl_ecu.dylib"
 
 # Optional: SIL Kit co‑simulation
 # silkit:
-#   registry: "silkit://localhost:8500"
-#   participant: "MyECU"
+#   registry_uri: "silkit://localhost:8500"
+#   participant_name: "MyECU"
 #   can_network: "CAN1"
 #   can_controller: "CAN1_Ctrl"
 ```
 
-### 6.2 Signal Database (`com_config.json`)
+### 6.2 BaseLayer Configuration (C structs in `Base_Entry.c`)
 
-Defines all CAN/LIN/ETH signals and PDUs:
+The BaseLayer uses **hardcoded C configuration structs** rather than
+external JSON files. The reference `Base_Entry.c` ships with sensible
+defaults. To customise for your ECU project, **copy `Base_Entry.c` into
+your project** and modify the configuration arrays.
 
-```json
-{
-  "signals": [
-    {
-      "name": "VehicleSpeed",
-      "id": 0,
-      "pdu_id": 0,
-      "bit_position": 0,
-      "bit_length": 16,
-      "endianness": "little",
-      "factor": 0.01,
-      "offset": 0,
-      "init_value": 0,
-      "unit": "km/h"
-    },
-    {
-      "name": "DoorStatus",
-      "id": 1,
-      "pdu_id": 0,
-      "bit_position": 16,
-      "bit_length": 8,
-      "endianness": "little",
-      "factor": 1.0,
-      "offset": 0,
-      "init_value": 0,
-      "unit": ""
-    },
-    {
-      "name": "LightCommand",
-      "id": 2,
-      "pdu_id": 1,
-      "bit_position": 0,
-      "bit_length": 8,
-      "endianness": "little",
-      "factor": 1.0,
-      "offset": 0,
-      "init_value": 0,
-      "unit": ""
-    }
-  ],
-  "pdus": [
-    {
-      "id": 0,
-      "name": "PDU_VehicleData",
-      "can_id": 256,
-      "dlc": 8,
-      "direction": "rx",
-      "bus_type": "can",
-      "cycle_time_ms": 10
-    },
-    {
-      "id": 1,
-      "name": "PDU_LightCtrl",
-      "can_id": 512,
-      "dlc": 8,
-      "direction": "tx",
-      "bus_type": "can",
-      "cycle_time_ms": 100
-    }
-  ]
-}
+#### Signal / PDU Configuration
+
+Signals and PDUs are defined as `Com_SignalConfigType` and
+`Com_PduConfigType` arrays:
+
+```c
+/* Signals */
+static const Com_SignalConfigType g_signals[] = {
+    { .signal_id = 0, .pdu_id = 0x100, .bit_position = 0,
+      .bit_length = 16, .endianness = COM_LITTLE_ENDIAN,
+      .direction = COM_DIRECTION_RX, .init_value = 0 },
+    { .signal_id = 1, .pdu_id = 0x200, .bit_position = 0,
+      .bit_length = 8, .endianness = COM_LITTLE_ENDIAN,
+      .direction = COM_DIRECTION_TX, .init_value = 0 },
+};
+
+/* PDUs */
+static const Com_PduConfigType g_pdus[] = {
+    { .pdu_id = 0x100, .frame_id = 0x600, .dlc = 8,
+      .direction = COM_DIRECTION_RX, .bus_type = VECU_BUS_CAN },
+    { .pdu_id = 0x200, .frame_id = 0x700, .dlc = 8,
+      .direction = COM_DIRECTION_TX, .bus_type = VECU_BUS_CAN },
+};
+
+static const Com_ConfigType g_com_config = {
+    .signals = g_signals, .num_signals = 2,
+    .pdus    = g_pdus,    .num_pdus    = 2,
+};
 ```
 
-### 6.3 Diagnostic Configuration (`dcm_config.json`)
+#### NvM Block Configuration
 
-Defines supported UDS services and DIDs:
+NvM blocks map to offsets in the SHM vars region:
 
-```json
-{
-  "sessions": [
-    { "id": 1, "name": "Default", "timeout_ms": 5000 },
-    { "id": 3, "name": "Extended", "timeout_ms": 5000 },
-    { "id": 2, "name": "Programming", "timeout_ms": 5000, "security_level": 1 }
-  ],
-  "security_levels": [
-    {
-      "level": 1,
-      "seed_size": 16,
-      "key_algorithm": "cmac_aes128",
-      "key_slot": 0
-    }
-  ],
-  "dids": [
-    {
-      "id": "0xF190",
-      "name": "VIN",
-      "size": 17,
-      "access": "read",
-      "session": ["Default", "Extended"],
-      "nvm_block": 1
-    },
-    {
-      "id": "0xF186",
-      "name": "ActiveDiagnosticSession",
-      "size": 1,
-      "access": "read",
-      "session": ["Default", "Extended"],
-      "source": "dcm_internal"
-    },
-    {
-      "id": "0x0100",
-      "name": "CalibrationValue1",
-      "size": 4,
-      "access": "readwrite",
-      "session": ["Extended"],
-      "security_level": 1,
-      "nvm_block": 2
-    }
-  ],
-  "routines": [
-    {
-      "id": "0xFF00",
-      "name": "ResetLearnValues",
-      "session": ["Extended"],
-      "security_level": 1,
-      "callback": "SwcDiag_RoutineResetLearnValues"
-    }
-  ]
-}
+```c
+static const NvM_BlockDescriptorType g_nvm_blocks[] = {
+    { .blockId = 0, .length = 17, .shmOffset = 0  },  /* VIN */
+    { .blockId = 1, .length = 4,  .shmOffset = 32 },  /* Calibration */
+};
+
+static const NvM_ConfigType g_nvm_config = {
+    .blocks = g_nvm_blocks, .numBlocks = 2,
+};
 ```
 
-### 6.4 NvM Configuration (`nvm_config.json`)
+#### Dcm DID / Routine Configuration
 
-Defines persistent data blocks stored in the SHM variable block:
+DIDs are configured with read/write callback functions:
 
-```json
-{
-  "blocks": [
-    {
-      "id": 1,
-      "name": "VIN",
-      "offset": 0,
-      "size": 17,
-      "default_value": "00000000000000000"
-    },
-    {
-      "id": 2,
-      "name": "CalibrationValue1",
-      "offset": 32,
-      "size": 4,
-      "default_value": [0, 0, 0, 0]
-    },
-    {
-      "id": 3,
-      "name": "DtcStorage",
-      "offset": 64,
-      "size": 1024,
-      "default_value": null
-    }
-  ],
-  "total_size": 4096,
-  "checksum": true
+```c
+/* DID 0xF190 = VIN (17 bytes), backed by NvM block 0 */
+static Std_ReturnType did_f190_read(uint8* data, uint16* length) {
+    *length = 17;
+    return NvM_ReadBlock(0, data);
 }
+static Std_ReturnType did_f190_write(const uint8* data, uint16 length) {
+    (void)length;
+    return NvM_WriteBlock(0, data);
+}
+
+static const Dcm_DidEntryType g_dids[] = {
+    { .did = 0xF190u, .length = 17,
+      .readFn = did_f190_read, .writeFn = did_f190_write },
+};
+
+static const Dcm_ConfigType g_dcm_config = {
+    .dids = g_dids, .numDids = 1,
+    .routines = NULL, .numRoutines = 0,
+    .sessionTimeoutMs = 5000,
+};
 ```
+
+#### CanTp Channel Configuration
+
+```c
+static const CanTp_ChannelConfigType g_cantp_channels[] = {
+    { .rxId = 0x641, .txId = 0x642, .fcId = 0x641,
+      .blockSize = 0, .stMin = 0 },
+};
+
+static const CanTp_ConfigType g_cantp_config = {
+    .channels = g_cantp_channels, .numChannels = 1,
+};
+```
+
+**Tip:** See `baselayer/src/Base_Entry.c` for the complete reference
+configuration and `examples/sample_ecu/` for a working example project.
 
 ---
 
@@ -580,27 +505,18 @@ vecu-loader \
   --mode distributed
 ```
 
-### Expected Output
+### Expected Output (approximate)
 
 ```
-[INFO] Loading APPL bridge: target/release/libvecu_appl.dylib
-[INFO] Loading BaseLayer: baselayer/build/libbase.dylib
-[INFO] Loading ECU code: my_ecu_project/build/libappl_ecu.dylib
-[INFO] Loading HSM: target/release/libvecu_hsm.dylib
-[INFO] ABI version: 1.1 (compatible)
-[INFO] APPL capabilities: FRAME_IO | DIAGNOSTICS
+[INFO] ABI version 1 — APPL capabilities: FRAME_IO | DIAGNOSTICS
 [INFO] HSM capabilities: HSM_SEED_KEY | SIGN_VERIFY | HSM_ENCRYPT | HSM_RNG
-[INFO] SHM allocated: 265728 bytes
-[INFO] EcuM: STARTUP → RUN
-[INFO] Simulation started: tick_interval=1000 µs
-[INFO] tick 0: Com_MainFunction, Dcm_MainFunction, NvM_MainFunction
-[INFO] tick 1: SwcBodyCtrl_10ms, SwcDiag (idle)
-...
-[INFO] tick 9999: simulation complete
-[INFO] EcuM: RUN → SHUTDOWN
-[INFO] NvM: WriteAll complete (3 blocks)
-[INFO] Simulation finished: 10000 ticks in 1.23s
+[INFO] SHM region: 65536 bytes
+[INFO] Running 10000 ticks (interval 1000 µs) …
+[INFO] Simulation finished: 10000 ticks
 ```
+
+The BaseLayer itself does not log per‑tick output. If a `Det_ReportError`
+is triggered, you will see the error forwarded through the log callback.
 
 ---
 
@@ -615,33 +531,33 @@ The vECU responds to UDS requests on the configured diagnostic CAN IDs.
 
 | ID | Direction | Content |
 |----|-----------|---------|
-| `0x600` | RX (tester → ECU) | UDS request |
-| `0x601` | TX (ECU → tester) | UDS response |
+| `0x641` | RX (tester → ECU) | UDS request |
+| `0x642` | TX (ECU → tester) | UDS response |
 
 ### Example: Read VIN (DID 0xF190)
 
 **Request:**
 ```
-CAN ID 0x600: [02 22 F1 90 00 00 00 00]
+CAN ID 0x641: [02 22 F1 90 00 00 00 00]
 ```
 
 **Response:**
 ```
-CAN ID 0x601: [10 14 62 F1 90 30 30 30]  (First Frame)
-CAN ID 0x601: [21 30 30 30 30 30 30 30]  (Consecutive Frame 1)
-CAN ID 0x601: [22 30 30 30 30 30 30 00]  (Consecutive Frame 2)
+CAN ID 0x642: [10 14 62 F1 90 30 30 30]  (First Frame)
+CAN ID 0x642: [21 30 30 30 30 30 30 30]  (Consecutive Frame 1)
+CAN ID 0x642: [22 30 30 30 30 30 30 00]  (Consecutive Frame 2)
 ```
 
 ### Example: SecurityAccess (SID 0x27)
 
 ```
-Step 1: Request Seed
+Step 1: Request Seed (on CAN ID 0x641)
   TX: [02 27 01 00 00 00 00 00]
-  RX: [12 67 01 <16 bytes seed>]   (multi‑frame via CanTp)
+  RX: [12 67 01 <16 bytes seed>]   (multi‑frame via CanTp on 0x642)
 
-Step 2: Send Key
+Step 2: Send Key (on CAN ID 0x641)
   TX: [12 27 02 <16 bytes CMAC>]   (multi‑frame via CanTp)
-  RX: [02 67 02 00 00 00 00 00]    (positive response = unlocked)
+  RX: [02 67 02 00 00 00 00 00]    (positive response on 0x642 = unlocked)
 ```
 
 The key is computed as `CMAC(master_key, seed)` — the HSM handles this
@@ -727,15 +643,15 @@ key = c.finalize()
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `Com_ReceiveSignal` returns 0 | No frames arriving | Check `com_config.json` CAN ID matches bus traffic |
-| Signal value wrong | Endianness mismatch | Verify `endianness` in `com_config.json` matches DBC |
-| TX frame not sent | PDU direction wrong | Set `"direction": "tx"` in PDU config |
+| `Com_ReceiveSignal` returns 0 | No frames arriving | Check `Com_PduConfigType.frame_id` matches bus traffic |
+| Signal value wrong | Endianness mismatch | Verify `endianness` field in `Com_SignalConfigType` matches DBC |
+| TX frame not sent | PDU direction wrong | Set `direction = COM_DIRECTION_TX` in PDU config |
 
 ### Diagnostic Issues
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| NRC 0x7F (serviceNotSupported) | SID not configured | Add SID to `dcm_config.json` |
+| NRC 0x7F (serviceNotSupported) | SID not in Dcm dispatch | All 9 SIDs are built‑in; check request format |
 | NRC 0x33 (securityAccessDenied) | Wrong session | Switch to Extended session first (0x10 03) |
 | NRC 0x35 (invalidKey) | Key computation wrong | Verify CMAC computation matches HSM master key |
 | No response | Diagnostic CAN IDs wrong | Check CanTp config matches tester CAN IDs |
@@ -744,7 +660,7 @@ key = c.finalize()
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `undefined reference to Com_*` | Not linking BaseLayer | Add `target_link_libraries(appl_ecu PRIVATE base)` |
+| `undefined reference to Com_*` | Symbols not resolved at runtime | Ensure BaseLayer is loaded first; on macOS use `-undefined dynamic_lookup` |
 | `implicit declaration of function` | Missing include | Add `#include "Com.h"` (or respective BSW header) |
 | `incompatible pointer type` | `Std_Types.h` mismatch | Use BaseLayer's `Std_Types.h`, not a different version |
 
@@ -775,8 +691,8 @@ If you are migrating from VTT, here are the key differences:
 3. **Remove VTT‑specific `#include`s** (`VttCntrl.h`, `VttOs.h`, etc.)
 4. **Add `#define VECU_SIL`** to replace VTT‑specific `#ifdef VTT_BUILD`
 5. **Create `Appl_Entry.c`** with init / main / shutdown (see Step 1)
-6. **Write `com_config.json`** from your DBC / ARXML signal database
-7. **Build and run** (see sections 4–7)
+6. **Edit `Base_Entry.c`** signal/PDU config from your DBC / ARXML
+7. **Build and run** (see sections 4‑7)
 
 Typical migration effort: **1–3 days** per ECU project, depending on
 complexity and number of hardware‑dependent code sections.
@@ -809,7 +725,6 @@ void Base_Shutdown(void);
 |----------|---------|---------|
 | `VECU_BASE_LIB` | Path to BaseLayer library | `/path/to/libbase.so` |
 | `VECU_APPL_LIB` | Path to application library | `/path/to/libappl_ecu.so` |
-| `VECU_BASE_CONFIG` | Path to BaseLayer config | `/path/to/base_config.json` |
 
 ### Useful Commands
 
