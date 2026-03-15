@@ -14,97 +14,97 @@ on proprietary tooling.
 
 ## Architecture Decisions
 
-### ADR‑001: Cross‑Platform vECU Loader für eigenentwickelte APPL/HSM Module
+### ADR‑001: Cross‑Platform vECU Loader for Custom APPL/HSM Modules
 
-**(OpenSUT‑kompatibel, ohne VTT‑Abhängigkeit)**
+**(OpenSUT‑compatible, no VTT dependency)**
 
 **Status:** Accepted
 
-#### Kontext
+#### Context
 
-Das vECU Runtime Environment existiert bereits und stellt bereit:
+The vECU Runtime Environment already provides:
 
-- Ausführungsumgebung für virtuelle ECUs
-- deterministische Simulation (Tick‑basiert)
-- Shared‑Memory‑basierte Interaktion
-- OpenSUT‑kompatible Semantik für vECU‑Zugriff
-- optionale Anbindung an verteilte Umgebungen (z. B. SilKit)
+- Execution environment for virtual ECUs
+- Deterministic simulation (tick‑based)
+- Shared‑memory‑based interaction
+- OpenSUT‑compatible semantics for vECU access
+- Optional integration with distributed environments (e.g. SIL Kit)
 
-Historisch wurden vECUs als VTT‑Artefakte (`appl.dll`, `hsm.dll`) betrachtet.
-Diese Annahme ist **nicht mehr gültig**.
+Historically, vECUs were treated as VTT artifacts (`appl.dll`, `hsm.dll`).
+This assumption is **no longer valid**.
 
-**Neue Ausgangslage:**
+**Current situation:**
 
-- APPL und HSM sind vollständig eigenentwickelte Module
-- Es existiert keine Abhängigkeit zu Vector VTT (weder Build, ABI, Tooling)
-- Die Begriffe APPL und HSM beschreiben fachliche Rollen, keine Tool‑Artefakte
-- OpenSUT‑Kompatibilität bedeutet semantische Kompatibilität, nicht Binär‑Kompatibilität
+- APPL and HSM are fully custom‑developed modules
+- There is no dependency on Vector VTT (neither build, ABI, nor tooling)
+- The terms APPL and HSM describe functional roles, not tool artifacts
+- OpenSUT compatibility means semantic compatibility, not binary compatibility
 
-Was fehlt, ist eine klar spezifizierte Loader‑Komponente, die:
+What is missing is a clearly specified loader component that:
 
-- diese Eigenentwicklungen plattformneutral lädt,
-- die ABI‑Grenze formalisiert,
-- deterministische Orchestrierung sicherstellt,
-- und das vECU Runtime Environment korrekt initialisiert.
+- loads these custom modules in a platform‑neutral way,
+- formalizes the ABI boundary,
+- ensures deterministic orchestration,
+- and correctly initializes the vECU Runtime Environment.
 
-#### Entscheidung
+#### Decision
 
-Wir spezifizieren einen eigenständigen, plattformneutralen vECU Loader, der:
+We specify an independent, platform‑neutral vECU Loader that:
 
-- ausschließlich eigenentwickelte APPL/HSM Module lädt
-- keinerlei Abhängigkeit zu VTT oder proprietären Toolchains besitzt
-- nur über eine definierte, stabile C‑ABI mit Modulen spricht
-- OpenSUT‑kompatible Ausführung ermöglicht
-- identisch auf Windows, Linux und macOS funktioniert
-- rein orchestrierend ist (keine ECU‑Logik)
+- exclusively loads custom APPL/HSM modules
+- has no dependency on VTT or proprietary toolchains
+- communicates with modules only through a defined, stable C ABI
+- enables OpenSUT‑compatible execution
+- works identically on Windows, Linux, and macOS
+- is purely orchestrating (no ECU logic)
 
-**Der Loader ist der einzige OS‑ und Plattform‑abhängige Teil der Lösung.**
+**The Loader is the only OS‑ and platform‑dependent part of the solution.**
 
-#### Begriffsdefinition
+#### Definitions
 
-| Begriff              | Bedeutung                                                      |
-| -------------------- | -------------------------------------------------------------- |
-| **APPL**             | Eigenentwickeltes vECU‑Applikationsmodul                       |
-| **HSM**              | Eigenentwickeltes vECU‑Security‑/Crypto‑Modul                  |
-| **Loader**           | Orchestrator, Lifecycle‑Owner, ABI‑Boundary                    |
-| **Runtime Env**      | Existierende Ausführungslogik (nicht Teil dieses ADRs)         |
-| **OpenSUT‑kompatibel** | Gleiches Interaktionsmodell, nicht gleiche Binärschnittstelle |
+| Term                   | Meaning                                                     |
+| ---------------------- | ----------------------------------------------------------- |
+| **APPL**               | Custom vECU application module                              |
+| **HSM**                | Custom vECU security / crypto module                        |
+| **Loader**             | Orchestrator, lifecycle owner, ABI boundary                 |
+| **Runtime Env**        | Existing execution logic (not part of this ADR)             |
+| **OpenSUT‑compatible** | Same interaction model, not same binary interface           |
 
-#### Verantwortlichkeiten des Loaders
+#### Loader Responsibilities
 
-**Der Loader ist verantwortlich für:**
+**The Loader is responsible for:**
 
-- CLI / Konfigurationsverarbeitung (`config.yaml`)
-- Laden der APPL/HSM Module
-- ABI‑Version‑ und Capability‑Negotiation
-- Initialisierung des vECU Runtime Environments
-- Allokation und Übergabe von Shared Memory
-- deterministische Tick‑Orchestrierung
-- Weiterleitung von IO zwischen Runtime ↔ Modulen
+- CLI / configuration processing (`config.yaml`)
+- Loading APPL/HSM modules
+- ABI version and capability negotiation
+- Initializing the vECU Runtime Environment
+- Allocating and handing over shared memory
+- Deterministic tick orchestration
+- Forwarding I/O between runtime and modules
 
-**Der Loader ist nicht verantwortlich für:**
+**The Loader is not responsible for:**
 
-- ECU‑Funktionalität
-- Bus‑Simulation
-- Diagnose‑Logik
-- Security‑Policies
-- Tool‑Integration
+- ECU functionality
+- Bus simulation
+- Diagnostic logic
+- Security policies
+- Tool integration
 
-➡️ **Der Loader kennt keine ECU‑Details.**
+**The Loader has no knowledge of ECU internals.**
 
-#### Plattformneutralität (harte Designentscheidung)
+#### Platform Neutrality (hard design decision)
 
-Der Loader muss ohne Codeänderung laufen auf:
+The Loader must run without code changes on:
 
-| Plattform | Mechanismus            |
-| --------- | ---------------------- |
-| Windows   | `.exe` + `.dll`        |
-| Linux     | ELF Binary + `.so`     |
-| macOS     | Mach‑O Binary + `.dylib` |
+| Platform | Mechanism              |
+| -------- | ---------------------- |
+| Windows  | `.exe` + `.dll`        |
+| Linux    | ELF binary + `.so`     |
+| macOS    | Mach‑O binary + `.dylib` |
 
-Alle OS‑Unterschiede sind intern gekapselt.
+All OS differences are encapsulated internally.
 
-#### Loader‑CLI (Code‑relevant)
+#### Loader CLI (code‑relevant)
 
 ```text
 vecu-loader
@@ -114,17 +114,17 @@ vecu-loader
   [--mode standalone|distributed]
 ```
 
-➡️ Keine impliziten Pfade, keine Tool‑Defaults.
+No implicit paths, no tool defaults.
 
-#### Modul‑Ladekonzept (ohne VTT)
+#### Module Loading Concept (without VTT)
 
-**Grundsatz:**
+**Principles:**
 
-- APPL und HSM sind normale dynamische Libraries
-- Namenskonvention ist rein betriebssystembedingt, nicht toolabhängig
-- Der Loader kennt nur **ein** Symbol
+- APPL and HSM are ordinary dynamic libraries
+- Naming conventions are purely OS‑driven, not tool‑dependent
+- The Loader knows only **one** symbol
 
-**Einziger verpflichtender Entry‑Point:**
+**Single mandatory entry point:**
 
 ```c
 vecu_status_t vecu_get_api(
@@ -133,40 +133,40 @@ vecu_status_t vecu_get_api(
 );
 ```
 
-➡️ Kein zweites Symbol, kein magisches Verhalten.
+No second symbol, no magic behavior.
 
-#### ABI‑Vertrag (Loader ↔ Module)
+#### ABI Contract (Loader ↔ Modules)
 
-**ABI‑Prinzipien:**
+**ABI principles:**
 
-- C‑ABI (kein C++, kein Rust‑ABI)
-- Function‑Table‑Pattern
-- explizite Versionierung
-- keine Allokation über Modulgrenzen
-- keine globalen Zustände
+- C ABI (no C++, no Rust ABI)
+- Function‑table pattern
+- Explicit versioning
+- No allocation across module boundaries
+- No global state
 
-➡️ Ziel: stabil, sprachneutral, testbar
+Goal: stable, language‑neutral, testable.
 
-#### Initialisierungssequenz (exakt, implementierbar)
+#### Initialization Sequence (exact, implementable)
 
-Der Loader muss folgende Sequenz einhalten:
+The Loader must follow this sequence:
 
-1. Lade APPL‑Modul
-2. Lade HSM‑Modul
-3. Rufe `vecu_get_api()` auf beiden Modulen auf
-4. Prüfe:
-   - ABI‑Version
-   - Modul‑Rolle (APPL/HSM)
-   - Capability‑Flags
-5. Initialisiere vECU Runtime Environment
-6. Allokiere Shared Memory
-7. Übergib Runtime‑Context an beide Module (`init`)
+1. Load APPL module
+2. Load HSM module
+3. Call `vecu_get_api()` on both modules
+4. Validate:
+   - ABI version
+   - Module role (APPL/HSM)
+   - Capability flags
+5. Initialize vECU Runtime Environment
+6. Allocate shared memory
+7. Pass runtime context to both modules (`init`)
 
-➡️ Kein Modul sieht das andere direkt.
+No module sees the other directly.
 
-#### Deterministische Orchestrierung (zwingend)
+#### Deterministic Orchestration (mandatory)
 
-Der Loader definiert die **einzige gültige Aufrufreihenfolge**:
+The Loader defines the **only valid call order**:
 
 ```text
 for each simulation tick:
@@ -176,182 +176,182 @@ for each simulation tick:
   4. Loader ← APPL:  poll_frame(outbound)  [0..N]
 ```
 
-> **Hinweis:** Die Inbound‑Frames (Schritt 1) stammen logisch aus dem
-> vECU Runtime Environment (Bus, OpenSUT, externe Quellen). Der Loader
-> leitet sie als Orchestrator an das APPL‑Modul weiter. Ebenso sammelt
-> der Loader in Schritt 4 die Outbound‑Frames ein und übergibt sie an
-> die Runtime. Module sehen nur den Loader, nie die Runtime direkt.
+> **Note:** The inbound frames (step 1) logically originate from the
+> vECU Runtime Environment (bus, OpenSUT, external sources). The Loader
+> forwards them as orchestrator to the APPL module. Likewise, in step 4
+> the Loader collects outbound frames and passes them to the runtime.
+> Modules only see the Loader, never the runtime directly.
 
-**Eigenschaften:**
+**Properties:**
 
 - Single‑threaded ABI
-- reproduzierbar
-- CI‑fähig
-- identisches Verhalten auf allen OS
+- Reproducible
+- CI‑capable
+- Identical behavior on all OS
 
-➡️ **Determinismus ist Teil der ABI.**
+**Determinism is part of the ABI.**
 
 #### Shared Memory Ownership
 
-- Shared Memory wird **ausschließlich vom Loader** erzeugt
-- Module erhalten:
-  - Base‑Pointer
-  - Größe
-  - Header mit Offsets
-- Module:
-  - dürfen lesen/schreiben
-  - dürfen **nicht** re‑allokieren
-  - dürfen keine Pointer untereinander austauschen
+- Shared memory is created **exclusively by the Loader**
+- Modules receive:
+  - Base pointer
+  - Size
+  - Header with offsets
+- Modules:
+  - May read/write
+  - Must **not** re‑allocate
+  - Must not exchange pointers with each other
 
-➡️ Verhindert versteckte Kopplung.
+Prevents hidden coupling.
 
-#### OpenSUT‑Kompatibilität (klar abgegrenzt)
+#### OpenSUT Compatibility (clearly scoped)
 
-Der Loader:
+The Loader:
 
-- erfüllt die **semantischen** Erwartungen von OpenSUT:
+- Fulfills the **semantic** expectations of OpenSUT:
   - vECU start/stop
-  - deterministische Ausführung
-  - klar definierte Interaktion
-- ist **kein** OpenSUT‑Framework
-- kann durch einen OpenSUT‑Adapter genutzt werden
+  - Deterministic execution
+  - Clearly defined interaction
+- Is **not** an OpenSUT framework
+- Can be used through an OpenSUT adapter
 
-➡️ Kompatibel, aber nicht abhängig.
+Compatible, but not dependent.
 
-#### Fehler‑ und Exit‑Semantik
+#### Error and Exit Semantics
 
-**Der Loader muss abbrechen, wenn:**
+**The Loader must abort when:**
 
-- Modul nicht geladen werden kann
-- `vecu_get_api` fehlt
-- ABI inkompatibel
-- Initialisierung fehlschlägt
+- A module cannot be loaded
+- `vecu_get_api` is missing
+- ABI is incompatible
+- Initialization fails
 
-**Der Loader darf weiterlaufen, wenn:**
+**The Loader may continue when:**
 
-- optionale Capabilities fehlen
-- Module keine Frames liefern
+- Optional capabilities are missing
+- Modules produce no frames
 
-#### Implementierungsleitplanken
+#### Implementation Guidelines
 
-**Sprache:**
+**Language:**
 
-- Loader: Rust (oder C++17)
-- Module: C / C++ / Rust
+- Loader: Rust (or C++17)
+- Modules: C / C++ / Rust
 
-**Regeln:**
+**Rules:**
 
-- keine OS‑APIs außerhalb des Loader‑Pakets
-- keine Threads im ABI
-- keine Exceptions über ABI
-- Logging nur über Callback
+- No OS APIs outside the Loader package
+- No threads in the ABI
+- No exceptions across the ABI
+- Logging only through callbacks
 
-#### Abgelehnte Alternativen
+#### Rejected Alternatives
 
-| Alternative                        | Grund                        |
-| ---------------------------------- | ---------------------------- |
-| VTT‑kompatible Binärschnittstelle  | unnötig, Tool‑Bindung        |
-| Windows‑DLL‑Only                   | widerspricht Linux/macOS Ziel |
-| C++‑ABI                            | instabil                     |
-| Callback‑basierte Orchestrierung   | nicht deterministisch        |
+| Alternative                      | Reason                          |
+| -------------------------------- | ------------------------------- |
+| VTT‑compatible binary interface  | Unnecessary, creates tool lock‑in |
+| Windows DLL only                 | Contradicts Linux/macOS goal    |
+| C++ ABI                          | Unstable                        |
+| Callback‑based orchestration     | Not deterministic               |
 
 ---
 
-### ADR‑002: Eigenentwickelte APPL‑ und HSM‑Module für vECU Loader
+### ADR‑002: Custom APPL and HSM Modules for vECU Loader
 
-**(1:1 kompatibel zur Loader‑ABI, OpenSUT‑kompatibel, plattformneutral)**
+**(1:1 compatible with Loader ABI, OpenSUT‑compatible, platform‑neutral)**
 
 **Status:** Accepted
 
-**Bezug:** Dieses ADR ist bindend in Kombination mit ADR‑001.
-Alle hier beschriebenen Module müssen die dort definierte Loader‑ABI erfüllen.
-Abweichungen sind nicht zulässig, da sonst Determinismus, Portabilität oder
-Austauschbarkeit verloren gehen.
+**Reference:** This ADR is binding in combination with ADR‑001.
+All modules described here must fulfill the Loader ABI defined there.
+Deviations are not permitted, as they would break determinism, portability,
+or interchangeability.
 
-#### Kontext
+#### Context
 
-Im vECU Runtime Environment werden zwei fachlich getrennte, eigenentwickelte
-Module ausgeführt:
+The vECU Runtime Environment executes two functionally separate, custom‑developed
+modules:
 
-- **APPL‑Modul:** Fahrzeug‑/ECU‑Applikationslogik
-- **HSM‑Modul:** Security‑, Crypto‑ und Schutzfunktionen
+- **APPL module:** Vehicle / ECU application logic
+- **HSM module:** Security, crypto, and protection functions
 
-Diese Module:
+These modules:
 
-- sind keine Tool‑Artefakte
-- sind keine VTT‑DLLs
-- sind vollständig unter eigener Kontrolle
-- werden ausschließlich über den vECU Loader orchestriert
+- Are not tool artifacts
+- Are not VTT DLLs
+- Are fully under own control
+- Are orchestrated exclusively by the vECU Loader
 
-Historische Tool‑Grenzen (z. B. CANoe/VTT) spielen keine Rolle mehr.
-Die Begriffe APPL und HSM bezeichnen **logische Rollen**, nicht Herkunft.
+Historical tool boundaries (e.g. CANoe/VTT) no longer apply.
+The terms APPL and HSM denote **logical roles**, not origin.
 
-#### Entscheidung
+#### Decision
 
-APPL und HSM werden als plattformneutrale, dynamisch ladbare Module definiert, die:
+APPL and HSM are defined as platform‑neutral, dynamically loadable modules that:
 
-- exakt dieselbe Loader‑ABI implementieren (ADR‑001)
-- keine direkte Abhängigkeit zueinander haben
-- nur über Shared Memory und definierte ABI‑Calls interagieren
-- keine OS‑, Tool‑ oder Framework‑Kenntnis besitzen
-- deterministisch und reproduzierbar arbeiten
+- Implement exactly the same Loader ABI (ADR‑001)
+- Have no direct dependency on each other
+- Interact only through shared memory and defined ABI calls
+- Have no OS, tool, or framework knowledge
+- Operate deterministically and reproducibly
 
-**Der Loader ist der einzige Orchestrator.**
+**The Loader is the sole orchestrator.**
 
-#### Gemeinsame Grundsätze für APPL und HSM
+#### Common Principles for APPL and HSM
 
-##### 1. ABI‑Pflicht
+##### 1. ABI Obligation
 
-Jedes Modul muss:
+Every module must:
 
-- `vecu_get_api()` exportieren
-- eine gültige `vecu_plugin_api_t` zurückliefern
-- `common.init` / `step` / `shutdown` implementieren
-- keine weiteren Exports bereitstellen
+- Export `vecu_get_api()`
+- Return a valid `vecu_plugin_api_t`
+- Implement `common.init` / `step` / `shutdown`
+- Provide no additional exports
 
-➡️ **Ein Symbol. Ein Vertrag.**
+**One symbol. One contract.**
 
-##### 2. Plattformneutralität
+##### 2. Platform Neutrality
 
-Ein Modul:
+A module:
 
-- darf keine OS‑APIs verwenden
-- darf keine Threads starten
-- darf keine dynamische Ladung durchführen
-- darf keine Speicherbereiche außerhalb des Loaders allokieren
+- Must not use OS APIs
+- Must not start threads
+- Must not perform dynamic loading
+- Must not allocate memory outside the Loader
 
-➡️ Ein Modul ist reiner Logik‑Code.
+A module is pure logic code.
 
-##### 3. Speicher‑ und Lebenszyklusregeln
+##### 3. Memory and Lifecycle Rules
 
-- Module besitzen keinen Speicher
-- Alle Ressourcen kommen vom Loader:
-  - Shared Memory
+- Modules own no memory
+- All resources come from the Loader:
+  - Shared memory
   - Allocator
   - Logger
-- Ein Modul:
-  - initialisiert sich in `init()`
-  - arbeitet nur in `step()`
-  - gibt Ressourcen in `shutdown()` frei
+- A module:
+  - Initializes in `init()`
+  - Works only in `step()`
+  - Releases resources in `shutdown()`
 
-➡️ Kein globaler Zustand außerhalb des Moduls.
+No global state outside the module.
 
-#### APPL‑Modul (Application Logic)
+#### APPL Module (Application Logic)
 
-##### Rolle
+##### Role
 
-Das APPL‑Modul implementiert:
+The APPL module implements:
 
-- ECU‑/Fahrzeug‑Applikationslogik
-- Zustandsautomaten
-- Kommunikation mit der Außenwelt (Frames, Events)
-- fachliche Reaktion auf Diagnose‑ und Steuerbefehle
+- ECU / vehicle application logic
+- State machines
+- Communication with the outside world (frames, events)
+- Functional response to diagnostic and control commands
 
-Es ist der **funktionale Kern** der vECU.
+It is the **functional core** of the vECU.
 
-##### Pflicht‑Capabilities (ABI)
+##### Required Capabilities (ABI)
 
-Das APPL‑Modul muss folgende Flags setzen:
+The APPL module must set the following flags:
 
 ```c
 VECU_CAP_FRAME_IO
@@ -363,56 +363,56 @@ Optional:
 VECU_CAP_DIAGNOSTICS
 ```
 
-##### Pflicht‑Funktionen (APPL‑API)
+##### Required Functions (APPL API)
 
-Das APPL‑Modul muss folgende Callbacks implementieren:
+The APPL module must implement the following callbacks:
 
 ```c
 appl.push_frame(const vecu_frame_t* in);   // Inbound
 appl.poll_frame(vecu_frame_t* out);         // Outbound
 ```
 
-Bedeutung:
+Meaning:
 
-- **`push_frame`** — wird vom Loader aufgerufen, liefert Inbound‑Events (Bus, Runtime, OpenSUT)
-- **`poll_frame`** — wird vom Loader gepollt, liefert Outbound‑Events (Bus, Runtime)
+- **`push_frame`** — called by the Loader, delivers inbound events (bus, runtime, OpenSUT)
+- **`poll_frame`** — polled by the Loader, delivers outbound events (bus, runtime)
 
-➡️ APPL ist event‑getrieben, nicht aktiv sendend.
+APPL is event‑driven, not actively sending.
 
-##### APPL‑Ausführungsmodell (bindend)
+##### APPL Execution Model (binding)
 
-APPL‑Code **darf nur:**
+APPL code **may only:**
 
-- Shared Memory lesen/schreiben
-- interne Zustände aktualisieren
-- Frames in interne Queues legen
+- Read/write shared memory
+- Update internal state
+- Place frames into internal queues
 
-APPL‑Code **darf nicht:**
+APPL code **must not:**
 
-- Zeit selbst messen
-- `sleep()` aufrufen
-- andere Module direkt aufrufen
-- Systemzustand abfragen
+- Measure time itself
+- Call `sleep()`
+- Call other modules directly
+- Query system state
 
-➡️ Zeit kommt ausschließlich über den Loader‑Tick.
+Time comes exclusively from the Loader tick.
 
-#### HSM‑Modul (Security / Crypto)
+#### HSM Module (Security / Crypto)
 
-##### Rolle
+##### Role
 
-Das HSM‑Modul implementiert:
+The HSM module implements:
 
-- kryptografische Primitive
+- Cryptographic primitives
 - SecurityAccess (Seed/Key)
-- Signatur / Verifikation
-- Schutzlogik für APPL
+- Signature / verification
+- Protection logic for APPL
 
-Es ist **kein echtes Hardware‑HSM**, sondern eine deterministische
-Security‑Abstraktion für vECUs.
+It is **not a real hardware HSM**, but a deterministic security abstraction
+for vECUs.
 
-##### Pflicht‑Capabilities (ABI)
+##### Required Capabilities (ABI)
 
-Das HSM‑Modul muss mindestens setzen:
+The HSM module must set at least:
 
 ```c
 VECU_CAP_HSM_SEED_KEY
@@ -424,9 +424,9 @@ Optional:
 VECU_CAP_SIGN_VERIFY
 ```
 
-##### Pflicht‑Funktionen (HSM‑API)
+##### Required Functions (HSM API)
 
-Das HSM‑Modul muss implementieren:
+The HSM module must implement:
 
 ```c
 hsm.seed(...)
@@ -440,23 +440,23 @@ hsm.sign(...)
 hsm.verify(...)
 ```
 
-➡️ Alle Funktionen sind rein funktional (keine Seiteneffekte außerhalb des Moduls).
+All functions are purely functional (no side effects outside the module).
 
-##### HSM‑Ausführungsmodell
+##### HSM Execution Model
 
-- HSM hat keine Kenntnis von Bussen
-- HSM kommuniziert nicht direkt mit APPL
-- Interaktion erfolgt:
-  - über Shared Memory
-  - oder über explizite Loader‑Aufrufe
+- HSM has no knowledge of buses
+- HSM does not communicate directly with APPL
+- Interaction occurs:
+  - Through shared memory
+  - Or through explicit Loader calls
 
-➡️ HSM ist rein dienstleistend.
+HSM is purely service‑providing.
 
-#### Gemeinsame Orchestrierung (APPL + HSM)
+#### Joint Orchestration (APPL + HSM)
 
-##### Verbindliche Tick‑Sequenz
+##### Mandatory Tick Sequence
 
-Der Loader ruft Module **immer** in folgender Reihenfolge auf:
+The Loader calls modules **always** in the following order:
 
 ```text
 1. APPL.push_frame(...)  [0..N]
@@ -465,128 +465,128 @@ Der Loader ruft Module **immer** in folgender Reihenfolge auf:
 4. APPL.poll_frame(...)   [0..N]
 ```
 
-Bedeutung:
+Meaning:
 
-- APPL kann Security‑Anfragen vorbereiten
-- HSM verarbeitet Security‑Logik
-- APPL nutzt Ergebnisse im selben Tick
+- APPL can prepare security requests
+- HSM processes security logic
+- APPL uses results in the same tick
 
-➡️ **Determinismus garantiert.**
+**Determinism guaranteed.**
 
-##### Shared Memory Nutzung
+##### Shared Memory Usage
 
-APPL und HSM:
+APPL and HSM:
 
-- erhalten denselben Shared‑Memory‑Bereich
-- kennen nur Offsets, keine Pointer untereinander
-- dürfen keine Ownership an Speicher beanspruchen
+- Receive the same shared memory region
+- Know only offsets, no pointers to each other
+- Must not claim ownership of memory
 
-➡️ Synchronisation erfolgt implizit durch Loader‑Sequenz, nicht durch Locks.
+Synchronization is implicit through the Loader sequence, not through locks.
 
-#### OpenSUT‑Kompatibilität
+#### OpenSUT Compatibility
 
-APPL/HSM sind OpenSUT‑kompatibel, weil:
+APPL/HSM are OpenSUT‑compatible because:
 
-- sie eine vECU darstellen
-- sie deterministisch start/stop‑bar sind
-- sie über klar definierte Schnittstellen interagieren
+- They represent a vECU
+- They are deterministically start/stop‑able
+- They interact through clearly defined interfaces
 
-Sie:
+They:
 
-- implementieren kein OpenSUT
-- kennen kein OpenSUT‑Protokoll
+- Do not implement OpenSUT
+- Have no knowledge of the OpenSUT protocol
 
-➡️ Der Loader fungiert als OpenSUT‑Execution‑Backend.
+The Loader acts as the OpenSUT execution backend.
 
-#### Fehler‑Semantik
+#### Error Semantics
 
-Ein Modul darf Fehler signalisieren, aber:
+A module may signal errors, but:
 
-- darf den Prozess **nicht** beenden
-- darf keine Exception über ABI werfen
-- darf keine undefinierten Zustände erzeugen
+- Must **not** terminate the process
+- Must not throw exceptions across the ABI
+- Must not create undefined states
 
-Der Loader entscheidet über Abbruch oder Fortsetzung.
+The Loader decides on abort or continuation.
 
-#### Implementierungsleitplanken (direkt code‑able)
+#### Implementation Guidelines (directly codeable)
 
-**Empfohlene Sprachen:**
+**Recommended languages:**
 
-- Rust (`cdylib`) → bevorzugt
+- Rust (`cdylib`) — preferred
 - C / C++
 
-**Zwingende Regeln:**
+**Mandatory rules:**
 
 - `extern "C"`
 - `#[repr(C)]`
-- keine Panics über ABI
-- kein Threading
-- kein I/O
+- No panics across the ABI
+- No threading
+- No I/O
 
-#### Abgelehnte Alternativen
+#### Rejected Alternatives
 
-| Alternative                   | Grund                    |
-| ----------------------------- | ------------------------ |
-| VTT‑Binärkompatibilität       | unnötig                  |
-| Direktaufruf APPL ↔ HSM       | zerstört Kapselung       |
-| Thread‑basierte Module        | nicht deterministisch    |
-| Tool‑abhängige APIs           | Lock‑in                  |
+| Alternative                  | Reason                        |
+| ---------------------------- | ----------------------------- |
+| VTT binary compatibility     | Unnecessary                   |
+| Direct APPL ↔ HSM calls     | Breaks encapsulation          |
+| Thread‑based modules         | Not deterministic             |
+| Tool‑dependent APIs          | Lock‑in                       |
 
-#### Ergebnis
+#### Result
 
-APPL und HSM sind definiert als:
+APPL and HSM are defined as:
 
-> **Deterministische, plattformneutrale Fachmodule, die ausschließlich
-> durch den vECU Loader orchestriert werden.**
+> **Deterministic, platform‑neutral functional modules orchestrated
+> exclusively by the vECU Loader.**
 
-In Kombination mit ADR‑001 ist die Architektur:
+In combination with ADR‑001, the architecture is:
 
-- vollständig spezifiziert
-- tool‑frei
-- plattformneutral
-- direkt implementierbar
+- Fully specified
+- Tool‑free
+- Platform‑neutral
+- Directly implementable
 
-### ADR‑003: Shared‑Memory‑Layout & Runtime‑Interaction Contract
+### ADR‑003: Shared Memory Layout & Runtime Interaction Contract
 
 **Status:** Accepted
 
-**Bezug:** Dieses ADR ist bindend zusammen mit:
+**Reference:** This ADR is binding together with:
 
 - ADR‑001: vECU Loader
-- ADR‑002: APPL & HSM Module
+- ADR‑002: APPL & HSM Modules
 
-Ohne Einhaltung dieses ADRs sind Determinismus, Austauschbarkeit und
-OpenSUT‑Kompatibilität nicht gewährleistet.
+Without compliance with this ADR, determinism, interchangeability, and
+OpenSUT compatibility are not guaranteed.
 
-#### Kontext
+#### Context
 
-Das vECU Runtime Environment nutzt Shared Memory als:
+The vECU Runtime Environment uses shared memory as:
 
-- einzigen gemeinsamen Datenraum zwischen Loader, APPL und HSM
-- Entkopplungsmechanismus (keine direkten Funktionsaufrufe APPL↔HSM)
-- Grundlage für deterministische Simulation
+- The sole shared data space between Loader, APPL, and HSM
+- A decoupling mechanism (no direct function calls APPL↔HSM)
+- The foundation for deterministic simulation
 
-Bisher war Shared Memory nur implizit dargestellt (Slide 3).
-Dieses ADR macht es **explizit, versioniert und implementierbar**.
+Previously, shared memory was only implicitly described.
+This ADR makes it **explicit, versioned, and implementable**.
 
-#### Entscheidung
+#### Decision
 
-Wir definieren ein offset‑basiertes, versioniertes Shared‑Memory‑Layout, das:
+We define an offset‑based, versioned shared memory layout that:
 
-- vom Loader allokiert und initialisiert wird
-- von APPL und HSM nur gelesen/geschrieben wird
-- keine Pointer‑Übergabe zwischen Modulen erlaubt
-- deterministisch ist (keine Locks notwendig)
-- ABI‑stabil über Versionen bleibt
+- Is allocated and initialized by the Loader
+- Is only read/written by APPL and HSM
+- Does not allow pointer exchange between modules
+- Is deterministic (no locks required)
+- Remains ABI‑stable across versions
 
-#### Grundprinzipien
+#### Core Principles
 
-- **Offsets statt Struct‑Wachstum** → ABI‑stabil
-- **Single‑Writer‑Regeln pro Bereich** → kein Locking
-- **Loader orchestriert** → implizite Synchronisation
-- **Header mit Magic + Version** → robust gegen Fehlkonfiguration
+- **Offsets instead of struct growth** → ABI‑stable
+- **Single‑writer rules per region** → no locking
+- **Loader orchestrates** → implicit synchronization
+- **Header with magic + version** → robust against misconfiguration
 
-#### Shared‑Memory Top‑Level‑Layout
+#### Shared Memory Top‑Level Layout
 
 ```text
 +----------------------------------------------------+
@@ -604,7 +604,7 @@ Wir definieren ein offset‑basiertes, versioniertes Shared‑Memory‑Layout, d
 +----------------------------------------------------+
 ```
 
-#### Verbindlicher Header (`vecu_shm_header_t`)
+#### Mandatory Header (`vecu_shm_header_t`)
 
 ```c
 typedef struct vecu_shm_header_t {
@@ -630,82 +630,82 @@ typedef struct vecu_shm_header_t {
 } vecu_shm_header_t;
 ```
 
-**Regeln:**
+**Rules:**
 
-- `magic` muss validiert werden
-- Offsets dürfen sich nie ändern, nur erweitert werden
-- Versionen steuern Backward‑Compatibility
+- `magic` must be validated
+- Offsets must never change, only be extended
+- Versions govern backward compatibility
 
 #### RX / TX Frame Queues
 
-**Modell:**
+**Model:**
 
-- Ringbuffer
-- Single Writer / Single Reader
-- Keine Locks notwendig
+- Ring buffer
+- Single writer / single reader
+- No locks required
 
 **Ownership:**
 
-| Bereich   | Writer           | Reader           |
+| Region    | Writer           | Reader           |
 | --------- | ---------------- | ---------------- |
 | RX Frames | Runtime / Loader | APPL             |
 | TX Frames | APPL             | Runtime / Loader |
 
 #### Diagnostic Mailbox
 
-**Zweck:**
+**Purpose:**
 
-- Diagnose‑Requests
-- Security‑Anfragen (Seed/Key)
-- Status‑Antworten
+- Diagnostic requests
+- Security requests (Seed/Key)
+- Status responses
 
-**Interaktion:**
+**Interaction:**
 
-- APPL schreibt Anfrage
-- HSM verarbeitet
-- Ergebnis wird im selben Bereich abgelegt
-- Loader garantiert Tick‑Reihenfolge
+- APPL writes request
+- HSM processes
+- Result is placed in the same region
+- Loader guarantees tick order
 
-➡️ Kein direkter Funktionsaufruf APPL→HSM.
+No direct function call APPL→HSM.
 
 #### Variable / State Block
 
-**Zweck:**
+**Purpose:**
 
-- ECU‑interner Zustand
-- Debug‑/Trace‑Informationen
-- DIO‑/Signal‑Simulation
+- ECU‑internal state
+- Debug / trace information
+- DIO / signal simulation
 
-**Regeln:**
+**Rules:**
 
-- Struktur ist projektspezifisch
-- Layout ist Version‑abhängig
-- Loader kennt Inhalt nicht
+- Structure is project‑specific
+- Layout is version‑dependent
+- Loader does not know the contents
 
-#### Synchronisationsmodell
+#### Synchronization Model
 
-- Keine Mutexes
-- Keine Atomics notwendig
-- Synchronisation erfolgt ausschließlich über:
-  - Loader‑Tick‑Sequenz (ADR‑001)
-  - klare Ownership pro Bereich
+- No mutexes
+- No atomics required
+- Synchronization occurs exclusively through:
+  - Loader tick sequence (ADR‑001)
+  - Clear ownership per region
 
-➡️ **Determinismus ist garantiert.**
+**Determinism is guaranteed.**
 
-#### Fehlerfälle
+#### Error Cases
 
-Der Loader muss abbrechen, wenn:
+The Loader must abort when:
 
-- `magic` falsch
-- ABI‑Version inkompatibel
-- Offsets außerhalb der Shared‑Memory‑Größe liegen
+- `magic` is incorrect
+- ABI version is incompatible
+- Offsets lie outside the shared memory size
 
-#### Ergebnis
+#### Result
 
-Shared Memory ist definiert als:
+Shared memory is defined as:
 
-> **Stabiler, versionierter Datenaustauschraum, der APPL und HSM
-> vollständig entkoppelt und deterministische Simulation ermöglicht.**
+> **A stable, versioned data exchange space that fully decouples APPL
+> and HSM and enables deterministic simulation.**
 
 ---
 
@@ -909,19 +909,19 @@ Shared Memory ist definiert als:
 +------------------------------------------------------+
 ```
 
-### C4 Zusammenfassung
+### C4 Summary
 
-- **L1** zeigt: Wer nutzt das System und wofür
-- **L2** zeigt: Welche Container existieren und wie sie interagieren
-- **L3** zeigt: Wie der Loader intern strukturiert ist
-- **L4** zeigt: Wie APPL und HSM intern logisch aufgebaut sind
+- **L1** shows: Who uses the system and for what purpose
+- **L2** shows: Which containers exist and how they interact
+- **L3** shows: How the Loader is structured internally
+- **L4** shows: How APPL and HSM are logically organized internally
 
-Alle Ebenen:
+All levels:
 
-- sind tool‑frei
-- sind plattformneutral
-- sind deterministisch
-- entsprechen exakt ADR‑001 bis ADR‑003
+- Are tool‑free
+- Are platform‑neutral
+- Are deterministic
+- Conform exactly to ADR‑001 through ADR‑003
 
 ---
 
@@ -929,21 +929,21 @@ Alle Ebenen:
 
 **Status:** Accepted
 
-### Kontext
+### Context
 
-Das vECU Runtime Environment benötigt zwei orthogonale Abstraktionen:
+The vECU Runtime Environment requires two orthogonal abstractions:
 
-1. **Tick‑Quelle:** Wann werden Ticks ausgelöst? (Timer‑Loop vs. SIL Kit Virtual Time Sync)
-2. **Frame‑Routing:** Wohin werden Frames gesendet? (SHM‑Queues, SIL Kit CAN, Hardware)
+1. **Tick source:** When are ticks triggered? (Timer loop vs. SIL Kit virtual time sync)
+2. **Frame routing:** Where are frames sent? (SHM queues, SIL Kit CAN, hardware)
 
-Bisher waren beide Aspekte implizit im Loader/Runtime gekoppelt. Für OpenSUT‑kompatible
-Co‑Simulation und alternative Backends müssen sie **explizit getrennt** sein.
+Previously, both aspects were implicitly coupled in the Loader/Runtime. For OpenSUT‑compatible
+co‑simulation and alternative backends they must be **explicitly separated**.
 
-### Entscheidung
+### Decision
 
-Zwei unabhängige Traits in `vecu-runtime`:
+Two independent traits in `vecu-runtime`:
 
-#### `RuntimeAdapter` – Tick‑Quelle
+#### `RuntimeAdapter` — Tick Source
 
 ```rust
 pub trait RuntimeAdapter {
@@ -951,12 +951,12 @@ pub trait RuntimeAdapter {
 }
 ```
 
-| Implementierung     | Crate           | Beschreibung                          |
-|---------------------|-----------------|---------------------------------------|
-| `StandaloneAdapter` | `vecu-runtime`  | Feste Tick‑Anzahl in Tight‑Loop       |
-| `SilKitAdapter`     | `vecu-silkit`   | SIL Kit Lifecycle + `TimeSyncService` |
+| Implementation      | Crate           | Description                          |
+|---------------------|-----------------|--------------------------------------|
+| `StandaloneAdapter` | `vecu-runtime`  | Fixed tick count in tight loop       |
+| `SilKitAdapter`     | `vecu-silkit`   | SIL Kit lifecycle + `TimeSyncService`|
 
-#### `OpenSutApi` – Frame‑Routing (Bus‑Abstraktion)
+#### `OpenSutApi` — Frame Routing (Bus Abstraction)
 
 ```rust
 pub trait OpenSutApi: Send {
@@ -967,45 +967,45 @@ pub trait OpenSutApi: Send {
 }
 ```
 
-| Implementierung        | Crate          | Beschreibung                                     |
-|------------------------|----------------|--------------------------------------------------|
-| `NullBus`              | `vecu-runtime` | No‑op (Test / Standalone ohne externe Busse)     |
-| `SilKitBus`            | `vecu-silkit`  | SIL Kit CAN‑Controller via Shared RX Buffer      |
-| *(SHM‑Fallback)*       | `vecu-runtime` | Wenn kein Bus gesetzt: SHM RX/TX Queues direkt   |
+| Implementation         | Crate          | Description                                    |
+|------------------------|----------------|------------------------------------------------|
+| `NullBus`              | `vecu-runtime` | No‑op (test / standalone without external buses)|
+| `SilKitBus`            | `vecu-silkit`  | SIL Kit multi‑bus controllers via shared RX buffer |
+| *(SHM fallback)*       | `vecu-runtime` | When no bus is set: SHM RX/TX queues directly  |
 
-#### Per‑Modul Bus‑Zuweisung
+#### Per‑Module Bus Assignment
 
-Jedes Modul kann seinen **eigenen** `OpenSutApi`‑Bus erhalten:
+Each module can receive its **own** `OpenSutApi` bus:
 
 ```rust
 runtime.set_appl_bus(Box::new(silkit_bus));   // APPL ↔ CAN+ETH+LIN+FR
 runtime.set_hsm_bus(Box::new(rbs_bus));       // HSM  ↔ RBS
 ```
 
-- `set_appl_bus()` – Bus für das APPL‑Modul (SHM‑Fallback wenn nicht gesetzt)
-- `set_hsm_bus()` – Bus für das HSM‑Modul (kein Fallback: ohne Bus kein Frame‑I/O für HSM)
-- `set_bus()` – Convenience‑Alias für `set_appl_bus()` (abwärtskompatibel)
+- `set_appl_bus()` — bus for the APPL module (SHM fallback when not set)
+- `set_hsm_bus()` — bus for the HSM module (no fallback: without bus no frame I/O for HSM)
+- `set_bus()` — convenience alias for `set_appl_bus()` (backward‑compatible)
 
 #### Integration in `Runtime::tick()`
 
 ```text
 for each simulation tick:
-  1a. appl_bus.recv_inbound()      ──→ inbound_buf   (oder SHM RX Fallback)
+  1a. appl_bus.recv_inbound()      ──→ inbound_buf   (or SHM RX fallback)
   1b. APPL.push_frame(inbound)     ─── inbound_buf
-  2a. hsm_bus.recv_inbound()       ──→ inbound_buf   (nur wenn hsm_bus gesetzt)
+  2a. hsm_bus.recv_inbound()       ──→ inbound_buf   (only if hsm_bus is set)
   2b. HSM.push_frame(inbound)      ─── inbound_buf
   3.  HSM.step(tick)
   4.  APPL.step(tick)
   5a. HSM.poll_frame()             ──→ outbound_buf
-  5b. hsm_bus.dispatch_outbound()  ─── outbound_buf  (nur wenn hsm_bus gesetzt)
+  5b. hsm_bus.dispatch_outbound()  ─── outbound_buf  (only if hsm_bus is set)
   6a. APPL.poll_frame()            ──→ outbound_buf
-  6b. appl_bus.dispatch_outbound() ─── outbound_buf  (oder SHM TX Fallback)
+  6b. appl_bus.dispatch_outbound() ─── outbound_buf  (or SHM TX fallback)
 ```
 
-#### Lifecycle‑Hooks
+#### Lifecycle Hooks
 
-- `on_start()` wird in `Runtime::init_all()` auf **beiden** Buses aufgerufen (nach Modul‑Init)
-- `on_stop()` wird in `Runtime::shutdown_all()` auf **beiden** Buses aufgerufen (vor Modul‑Shutdown)
+- `on_start()` is called in `Runtime::init_all()` on **both** buses (after module init)
+- `on_stop()` is called in `Runtime::shutdown_all()` on **both** buses (before module shutdown)
 
 ### Separation of Concerns
 
@@ -1013,7 +1013,7 @@ for each simulation tick:
 ┌─────────────────────────────────────────────────────────────┐
 │  vECU Runtime Env                                           │
 │                                                             │
-│  RuntimeAdapter (WANN)                                      │
+│  RuntimeAdapter (WHEN)                                      │
 │  ┌──────────────────┐                                       │
 │  │ StandaloneAdapter │                                       │
 │  │ SilKitAdapter     │                                       │
@@ -1034,15 +1034,15 @@ for each simulation tick:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Konsequenzen
+### Consequences
 
-- **Per‑Modul Bus‑Zuweisung**: APPL und HSM können jeweils eigene `OpenSutApi`‑Instanzen haben
-- Neue Bus‑Backends (TAP Bridge, RBS, Hardware) implementieren nur `OpenSutApi`
-- Neue Tick‑Quellen (HiL, Replay) implementieren nur `RuntimeAdapter`
-- Bestehender Standalone‑Modus unverändert (SHM‑Fallback für APPL)
-- HSM Frame‑I/O nur aktiv wenn `hsm_bus` gesetzt (kein SHM‑Fallback für HSM)
-- `SilKitBus` nutzt `Arc<Mutex<Vec<VecuFrame>>>` als thread‑sicheren RX‑Buffer
-- CAN‑only: ETH/LIN/FlexRay Controller als TODO dokumentiert
+- **Per‑module bus assignment**: APPL and HSM can each have their own `OpenSutApi` instances
+- New bus backends (TAP bridge, RBS, hardware) only need to implement `OpenSutApi`
+- New tick sources (HiL, replay) only need to implement `RuntimeAdapter`
+- Existing standalone mode is unchanged (SHM fallback for APPL)
+- HSM frame I/O is only active when `hsm_bus` is set (no SHM fallback for HSM)
+- `SilKitBus` uses `Arc<Mutex<Vec<VecuFrame>>>` as a thread‑safe RX buffer
+- Multi‑bus: CAN, Ethernet, LIN, and FlexRay controllers implemented
 
 ---
 
