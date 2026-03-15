@@ -21,6 +21,12 @@ set(BASE_SOURCES
     src/Os.c
     src/Det.c
     src/Rte.c
+    src/Com.c
+    src/PduR.c
+    src/CanIf.c
+    src/EthIf.c
+    src/LinIf.c
+    src/FrIf.c
 )
 
 # ── Shared library ───────────────────────────────────────────────────

@@ -7,6 +7,8 @@
  */
 
 #include "SchM.h"
+#include "CanIf.h"
+#include "Com.h"
 #include <stddef.h>
 
 /* ── Internal state ─────────────────────────────────────────────── */
@@ -20,11 +22,11 @@ static boolean g_initialized = FALSE;
 
 typedef void (*SchM_MainFunctionPtr)(void);
 
-/* Placeholder: no additional BSW MainFunctions registered in P3.
+/* BSW MainFunction table — executed in order each tick.
  * A NULL sentinel terminates the list. */
 static const SchM_MainFunctionPtr g_main_functions[] = {
-    /* Com_MainFunction,  — P4 */
-    /* PduR_MainFunction, — P4 */
+    CanIf_RxMainFunction,  /* Process inbound CAN frames first */
+    Com_MainFunction,      /* Then handle signal TX/RX */
     /* Dcm_MainFunction,  — P5 */
     NULL  /* sentinel */
 };

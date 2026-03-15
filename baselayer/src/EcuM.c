@@ -9,6 +9,12 @@
 #include "SchM.h"
 #include "Os.h"
 #include "Det.h"
+#include "CanIf.h"
+#include "EthIf.h"
+#include "LinIf.h"
+#include "FrIf.h"
+#include "PduR.h"
+#include "Com.h"
 
 static EcuM_StateType g_state = ECUM_STATE_STARTUP;
 
@@ -18,6 +24,12 @@ void EcuM_Init(void) {
     /* Initialise sub-modules in dependency order. */
     Det_Init();
     Os_Init();
+    CanIf_Init();
+    EthIf_Init();
+    LinIf_Init();
+    FrIf_Init();
+    PduR_Init();
+    /* Com_Init is called externally with config — see Base_Init. */
     SchM_Init();
 
     /* Transition to RUN. */
@@ -37,6 +49,12 @@ void EcuM_GoSleep(void) {
 
     /* De-init in reverse order. */
     SchM_DeInit();
+    Com_DeInit();
+    PduR_DeInit();
+    FrIf_DeInit();
+    LinIf_DeInit();
+    EthIf_DeInit();
+    CanIf_DeInit();
     Os_Shutdown();
     /* Det stays alive until the very end for error reporting. */
 }
