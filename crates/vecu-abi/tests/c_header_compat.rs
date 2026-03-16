@@ -49,6 +49,7 @@ fn c_headers_compile_and_match_rust_layout() {
         .extra_warnings(true)
         .flag_if_supported("-std=c11")
         .flag_if_supported("-pedantic")
+        .flag_if_supported("/std:c11")
         .out_dir(&out_dir)
         .try_compile("abi_compat")
         .expect("C header ABI compatibility check failed — layout mismatch");
