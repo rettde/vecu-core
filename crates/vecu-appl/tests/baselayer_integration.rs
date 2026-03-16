@@ -1,5 +1,9 @@
 //! Integration test: compile the real `BaseLayer` + mock application,
 //! load them via bridge mode, and verify end-to-end lifecycle.
+//!
+//! Requires a POSIX C compiler (`cc`); skipped on Windows.
+
+#![cfg(not(target_os = "windows"))]
 
 use std::path::PathBuf;
 use std::sync::Mutex;

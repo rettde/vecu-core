@@ -4,7 +4,10 @@
 //! injects a CAN frame, and verifies `Com_ReceiveSignal` returns the correct
 //! value.  Also verifies `Com_SendSignal` produces the correct outbound frame
 //! via `push_tx_frame`.
+//!
+//! Requires a POSIX C compiler (`cc`); skipped on Windows.
 
+#![cfg(not(target_os = "windows"))]
 #![allow(unsafe_code)]
 
 use std::path::PathBuf;

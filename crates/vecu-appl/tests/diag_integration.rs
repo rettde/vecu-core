@@ -2,7 +2,10 @@
 //!
 //! Tests `Dcm` (UDS dispatch), `Dem` (DTC lifecycle), and `NvM`
 //! (block read/write via SHM) end-to-end through the `BaseLayer`.
+//!
+//! Requires a POSIX C compiler (`cc`); skipped on Windows.
 
+#![cfg(not(target_os = "windows"))]
 #![allow(unsafe_code)]
 
 use std::path::PathBuf;

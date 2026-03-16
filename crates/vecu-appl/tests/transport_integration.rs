@@ -2,7 +2,10 @@
 //!
 //! Tests ISO 15765-2 single-frame and multi-frame segmentation/reassembly,
 //! and `DoIP` diagnostic message routing.
+//!
+//! Requires a POSIX C compiler (`cc`); skipped on Windows.
 
+#![cfg(not(target_os = "windows"))]
 #![allow(unsafe_code)]
 
 use std::path::PathBuf;

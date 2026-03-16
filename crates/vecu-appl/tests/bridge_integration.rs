@@ -1,5 +1,9 @@
 //! Integration test: compile mock C libraries, set env vars, and verify
 //! bridge mode works end-to-end via the vecu-appl ABI.
+//!
+//! Requires a POSIX C compiler (`cc`); skipped on Windows.
+
+#![cfg(not(target_os = "windows"))]
 
 use std::path::PathBuf;
 use std::sync::Mutex;

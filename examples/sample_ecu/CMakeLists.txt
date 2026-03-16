@@ -41,3 +41,8 @@ if(WIN32)
 else()
     target_compile_options(appl_ecu PRIVATE -fvisibility=default)
 endif()
+
+# appl_ecu calls functions from the base library (Com_ReceiveSignal, etc.)
+# via inline RTE headers.  On macOS, ld64 requires all symbols to be
+# resolved at link time for shared libraries, so we must link explicitly.
+target_link_libraries(appl_ecu PRIVATE base)

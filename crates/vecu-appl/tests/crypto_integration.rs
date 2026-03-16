@@ -5,7 +5,10 @@
 //! 1. `Csm_Encrypt` produces the same output as the direct `hsm_encrypt` callback
 //! 2. `Csm_RandomGenerate` returns non-zero random bytes
 //! 3. `SecurityAccess` flow: seed → mac → key validate
+//!
+//! Requires a POSIX C compiler (`cc`); skipped on Windows.
 
+#![cfg(not(target_os = "windows"))]
 #![allow(unsafe_code)]
 
 use std::path::PathBuf;
