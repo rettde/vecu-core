@@ -29,6 +29,7 @@ AUTOSAR Classic ECU source code and want to run it as a virtual ECU.
 10. [Troubleshooting](#10-troubleshooting)
 11. [Differences from Vector VTT](#11-differences-from-vector-vtt)
 12. [Using the Vector AUTOSAR BSW Instead of Stubs](#12-using-the-vector-autosar-bsw-instead-of-stubs)
+13. [Using Eclipse OpenBSW as an Open‑Source BaseLayer](#13-using-eclipse-openbsw-as-an-open-source-baselayer)
 
 ---
 
@@ -901,6 +902,202 @@ The rest of the workflow (SWC code, RTE headers, `config.yaml`,
 
 > **Tip:** You can maintain both setups in parallel. The SWC code and RTE
 > headers are identical — only `libbase.so` is swapped.
+
+---
+
+## 13. Using Eclipse OpenBSW as an Open‑Source BaseLayer
+
+[Eclipse OpenBSW](https://github.com/esrlabs/openbsw) is a professional,
+open‑source (Apache‑2.0) software platform for automotive microcontrollers
+developed by [ESRLabs](https://www.esrlabs.com/) under the Eclipse
+Foundation. It provides real BSW‑level functionality (async runtime,
+CAN, diagnostics, timers) and already supports a **POSIX target** that
+runs on the host PC.
+
+OpenBSW can serve as a fully open‑source alternative to both our stub
+BaseLayer and the proprietary Vector BSW.
+
+### Key Differences from Our Stub BaseLayer
+
+| Aspect | Our Stubs | Eclipse OpenBSW |
+|--------|-----------|-----------------|
+| **Language** | C11 | C++ (with Rust integration via Embassy) |
+| **API surface** | AUTOSAR function names (`Com_*`, `Dcm_*`, …) | Own C++ API (not AUTOSAR‑named) |
+| **Complexity** | Minimal stubs (state stored in arrays) | Real state machines, cooperative scheduling |
+| **License** | MIT / Apache‑2.0 | Apache‑2.0 |
+| **POSIX target** | Built for host‑PC from day one | Supported (`cmake --preset posix`) |
+| **Maintenance** | Part of vecu‑core | Eclipse Foundation + ESRLabs |
+
+### Integration Concept
+
+Because OpenBSW uses its own API (not AUTOSAR function names), an
+**AUTOSAR shim layer** is needed between your SWC code and OpenBSW:
+
+```
+┌───────────────────────────────────────────────────────┐
+│  vECU Runtime (Rust)                                  │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │  vecu-appl (ABI Bridge)                         │  │
+│  │  ┌────────────────┐  ┌───────────────────────┐  │  │
+│  │  │  ECU C‑Code    │  │  AUTOSAR Shim (C)     │  │  │
+│  │  │  (SWCs)        │→ │  Com_*() → OpenBSW    │  │  │
+│  │  │                │  │  Dcm_*() → OpenBSW    │  │  │
+│  │  │                │  │  NvM_*() → OpenBSW    │  │  │
+│  │  └────────────────┘  └──────────┬────────────┘  │  │
+│  │                                 ↓                │  │
+│  │                      ┌────────────────────────┐  │  │
+│  │                      │  Eclipse OpenBSW       │  │  │
+│  │                      │  (C++, Apache‑2.0)     │  │  │
+│  │                      │  + Base_Entry.cpp       │  │  │
+│  │                      └────────────────────────┘  │  │
+│  └─────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────┘
+```
+
+### Step 1: Clone and Build OpenBSW for POSIX
+
+```bash
+git clone https://github.com/esrlabs/openbsw.git
+cd openbsw
+
+# Build for host PC (POSIX target)
+cmake --preset posix
+cmake --build --preset posix
+```
+
+### Step 2: Create the Adapter (`Base_Entry.cpp`)
+
+The adapter maps our three lifecycle functions to the OpenBSW runtime:
+
+```cpp
+// Base_Entry.cpp — Adapter for Eclipse OpenBSW
+extern "C" {
+#include "vecu_base_context.h"
+}
+
+// OpenBSW headers
+#include "async/AsyncBinding.h"
+#include "lifecycle/LifecycleManager.h"
+
+static const vecu_base_context_t* g_ctx = nullptr;
+
+extern "C" {
+
+const vecu_base_context_t* Base_GetCtx(void) { return g_ctx; }
+
+#ifdef _WIN32
+  #define EXPORT __declspec(dllexport)
+#else
+  #define EXPORT __attribute__((visibility("default")))
+#endif
+
+EXPORT void Base_Init(const vecu_base_context_t* ctx) {
+    g_ctx = ctx;
+    // Initialize OpenBSW lifecycle
+    ::lifecycle::LifecycleManager::init();
+}
+
+EXPORT void Base_Step(uint64_t tick) {
+    (void)tick;
+    // Drive OpenBSW cooperative scheduling for one cycle
+    ::async::execute();
+}
+
+EXPORT void Base_Shutdown(void) {
+    ::lifecycle::LifecycleManager::shutdown();
+    g_ctx = nullptr;
+}
+
+} // extern "C"
+```
+
+> **Note:** The exact OpenBSW API calls depend on your configuration.
+> Refer to the [OpenBSW documentation](https://eclipse-openbsw.github.io/openbsw)
+> for the current lifecycle and async API.
+
+### Step 3: Create the AUTOSAR Shim Layer
+
+The shim provides AUTOSAR‑named C functions that delegate to OpenBSW
+internals. Example for `Com_ReceiveSignal`:
+
+```c
+// autosar_shim/Com_Shim.c
+#include "Com.h"
+#include "openbsw_signal_bridge.h"  // your bridge header
+
+Std_ReturnType Com_ReceiveSignal(Com_SignalIdType id, void* value) {
+    return openbsw_signal_read(id, value);  // calls into OpenBSW
+}
+
+Std_ReturnType Com_SendSignal(Com_SignalIdType id, const void* value) {
+    return openbsw_signal_write(id, value);
+}
+```
+
+You need one shim file per BSW module your SWCs actually call. Typical
+set: `Com_Shim.c`, `Dcm_Shim.c`, `NvM_Shim.c`, `Dem_Shim.c`.
+
+### Step 4: Build as Shared Library
+
+```cmake
+cmake_minimum_required(VERSION 3.16)
+project(openbsw_base CXX C)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# OpenBSW sources (built as POSIX target)
+add_subdirectory(${OPENBSW_DIR} openbsw_build)
+
+# AUTOSAR shim layer
+set(SHIM_SOURCES
+    autosar_shim/Com_Shim.c
+    autosar_shim/Dcm_Shim.c
+    autosar_shim/NvM_Shim.c
+)
+
+add_library(base SHARED
+    Base_Entry.cpp
+    ${SHIM_SOURCES}
+)
+
+target_link_libraries(base PRIVATE openbsw::platform)
+
+target_include_directories(base PRIVATE
+    ${OPENBSW_DIR}/libs
+    ${VECU_CORE_DIR}/crates/vecu-abi/include
+    ${VECU_CORE_DIR}/baselayer/include   # for Std_Types.h
+    autosar_shim
+)
+
+target_compile_options(base PRIVATE -fvisibility=default)
+```
+
+### Step 5: Use in config.yaml
+
+```yaml
+appl:
+  bridge: "vecu-core/target/release/libvecu_appl.dylib"
+  base_layer: "openbsw_base/build/libbase.dylib"   # ← OpenBSW
+  ecu_code: "my_ecu/build/libappl_ecu.dylib"
+```
+
+### When to Use Which BaseLayer
+
+| Scenario | Stubs | Vector BSW | OpenBSW |
+|----------|-------|------------|---------|
+| Quick prototyping | ✅ Best | — | — |
+| Unit tests / CI | ✅ Best | — | ✅ Good |
+| Fully open‑source stack | ✅ Good | ❌ No | ✅ Best |
+| Production‑accurate BSW | — | ✅ Best | ✅ Good |
+| No AUTOSAR license at all | ✅ | ❌ | ✅ |
+| Existing Vector project | — | ✅ Best | — |
+| Rust + C++ mixed codebase | — | — | ✅ Best |
+
+> **Status:** OpenBSW integration is on the roadmap. The shim layer
+> (`vecu‑openbsw‑shim`) is planned as a separate repository. Contributions
+> welcome.
 
 ---
 

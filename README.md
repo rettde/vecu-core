@@ -1,11 +1,10 @@
-# vecu-core
+  # vecu-core
+  **Deterministic virtual ECU runtime environment** for executing
+  AUTOSAR-based ECU C-code on a host PC (Windows, Linux, macOS).
 
-**Deterministic virtual ECU runtime environment** for executing
-AUTOSAR-based ECU C-code on a host PC (Windows, Linux, macOS).
-
-> *This project is not affiliated with or endorsed by the AUTOSAR
-> consortium. AUTOSAR API names are used solely for interoperability
-> with existing ECU software.*
+  > *This project is not affiliated with or endorsed by the AUTOSAR
+  > consortium. AUTOSAR API names are used solely for interoperability
+  > with existing ECU software.*
 
 ---
 
@@ -167,8 +166,25 @@ Summary — full details in [HOWTO_ECU_INTEGRATION.md](HOWTO_ECU_INTEGRATION.md)
 | 4 | Compile as shared library (CMake template in HOWTO) |
 | 5 | Create `config.yaml` and run `vecu-loader` |
 
-Alternatively: use the real **Vector AUTOSAR BSW** instead of stubs —
-see [HOWTO Section 12](HOWTO_ECU_INTEGRATION.md#12-using-the-vector-autosar-bsw-instead-of-stubs).
+Alternative BaseLayer options (your SWC code stays the same):
+
+| BaseLayer | License | Use case |
+|-----------|---------|----------|
+| **Our stubs** (default) | MIT / Apache-2.0 | Prototyping, unit tests, CI |
+| **Vector AUTOSAR BSW** | Proprietary | Production-accurate validation |
+| **Eclipse OpenBSW** | Apache-2.0 | Fully open-source stack with real state machines |
+
+See [HOWTO Section 12](HOWTO_ECU_INTEGRATION.md#12-using-the-vector-autosar-bsw-instead-of-stubs) (Vector)
+and [HOWTO Section 13](HOWTO_ECU_INTEGRATION.md#13-using-eclipse-openbsw-as-an-open-source-baselayer) (OpenBSW).
+
+---
+
+## Roadmap
+
+- [ ] **Eclipse OpenBSW shim layer** — AUTOSAR-API wrapper over [OpenBSW](https://github.com/esrlabs/openbsw) (`vecu-openbsw-shim` repo)
+- [ ] **Pilot integration** of a real ECU project
+- [ ] **ARXML → C-struct converter** for DaVinci-generated configurations
+- [ ] **Web dashboard** for simulation results
 
 ---
 
@@ -350,8 +366,23 @@ Kurzfassung — Details in [HOWTO_ECU_INTEGRATION.md](HOWTO_ECU_INTEGRATION.md):
 | 4 | Als Shared Library kompilieren (CMake-Template im HOWTO) |
 | 5 | `config.yaml` erstellen und `vecu-loader` starten |
 
-Alternativ: Echten **Vector AUTOSAR BSW** statt Stubs verwenden —
-siehe [HOWTO Section 12](HOWTO_ECU_INTEGRATION.md#12-using-the-vector-autosar-bsw-instead-of-stubs).
+Alternative BaseLayer-Optionen (euer SWC-Code bleibt identisch):
+
+| BaseLayer | Lizenz | Einsatz |
+|-----------|--------|---------|
+| **Unsere Stubs** (Default) | MIT / Apache-2.0 | Prototyping, Unit-Tests, CI |
+| **Vector AUTOSAR BSW** | Proprietär | Produktionsnahe Validierung |
+| **Eclipse OpenBSW** | Apache-2.0 | Vollständig offener Stack mit echten Zustandsmaschinen |
+
+Siehe [HOWTO Section 12](HOWTO_ECU_INTEGRATION.md#12-using-the-vector-autosar-bsw-instead-of-stubs) (Vector)
+und [HOWTO Section 13](HOWTO_ECU_INTEGRATION.md#13-using-eclipse-openbsw-as-an-open-source-baselayer) (OpenBSW).
+
+## Roadmap
+
+- [ ] **Eclipse OpenBSW Shim-Layer** — AUTOSAR-API-Wrapper über [OpenBSW](https://github.com/esrlabs/openbsw) (`vecu-openbsw-shim` Repo)
+- [ ] **Pilot-Integration** eines echten ECU-Projekts
+- [ ] **ARXML → C-Struct-Konverter** für DaVinci-generierte Konfigurationen
+- [ ] **Web-Dashboard** für Simulationsergebnisse
 
 ## Tests & CI
 
