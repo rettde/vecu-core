@@ -416,6 +416,61 @@ static void test_fls_error(void) {
     Fls_DeInit();
 }
 
+/* ── Test: E2E CAN loopback (TX → mock loopback → RX → RxIndication) ── */
+
+static int mock_loopback_push_tx(const vecu_frame_t* frame) {
+    if (g_rx_count >= MOCK_QUEUE_SIZE) { return VECU_MODULE_ERROR; }
+    int idx = (g_rx_head + g_rx_count) % MOCK_QUEUE_SIZE;
+    memcpy(&g_rx_queue[idx], frame, sizeof(vecu_frame_t));
+    g_rx_count++;
+    return VECU_OK;
+}
+
+static void test_can_e2e_loopback(void) {
+    g_tx_count = 0;
+    g_rx_head = 0;
+    g_rx_count = 0;
+    g_canif_rx_count = 0;
+    g_canif_tx_conf_count = 0;
+    g_canif_mode_ind_count = 0;
+
+    vecu_base_context_t lb_ctx;
+    memset(&lb_ctx, 0, sizeof(lb_ctx));
+    lb_ctx.push_tx_frame   = mock_loopback_push_tx;
+    lb_ctx.pop_rx_frame    = mock_pop_rx;
+    lb_ctx.shm_vars        = g_mock_shm;
+    lb_ctx.shm_vars_size   = MOCK_SHM_SIZE;
+    lb_ctx.log_fn          = mock_log;
+    lb_ctx.tick_interval_us = 1000;
+    VMcal_Init(&lb_ctx);
+
+    Can_ConfigType cfg = {1, 1};
+    Can_Init(&cfg);
+    Can_SetControllerMode(0, CAN_T_START);
+
+    uint8_t tx_data[] = {0xCA, 0xFE, 0xBA, 0xBE, 0xDE, 0xAD, 0xBE, 0xEF};
+    Can_PduType pdu;
+    pdu.id = 0x7FF;
+    pdu.length = 8;
+    memset(pdu._pad, 0, sizeof(pdu._pad));
+    pdu.sdu = tx_data;
+
+    ASSERT_EQ(Can_Write(3, &pdu), E_OK, "E2E: Can_Write");
+    ASSERT_EQ(g_rx_count, 1, "E2E: loopback queued");
+
+    Can_MainFunction_Read();
+    ASSERT_EQ(g_canif_rx_count, 1, "E2E: RxIndication fired");
+    ASSERT_EQ(g_canif_last_rx_id, 0x7FF, "E2E: RxIndication CAN ID");
+    ASSERT_EQ(g_canif_last_rx_dlc, 8, "E2E: RxIndication DLC");
+    ASSERT_MEM_EQ(g_canif_last_rx_data, tx_data, 8, "E2E: RxIndication data matches TX");
+
+    Can_MainFunction_Write();
+    ASSERT_EQ(g_canif_tx_conf_count, 1, "E2E: TxConfirmation");
+    ASSERT_EQ(g_canif_last_tx_hth, 3, "E2E: TxConf HTH");
+
+    Can_DeInit();
+}
+
 /* ── main ──────────────────────────────────────────────────────────── */
 
 int main(void) {
@@ -438,6 +493,7 @@ int main(void) {
     test_fls_async();
     test_fls_cancel();
     test_fls_error();
+    test_can_e2e_loopback();
 
     if (g_test_failures == 0) {
         printf("vmcal_functional_test: ALL PASSED\n");
