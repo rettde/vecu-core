@@ -72,6 +72,7 @@ fn run(cli: &Cli) -> Result<(), LoaderError> {
             tick_interval_us: 1000,
             queue_capacity: vecu_abi::DEFAULT_QUEUE_CAPACITY,
             vars_size: vecu_abi::DEFAULT_VARS_SIZE,
+            shm_file: None,
             mode: ExecMode::Standalone,
             silkit: None,
         }

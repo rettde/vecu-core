@@ -87,12 +87,29 @@ fn try_activate_bridge(ctx: &VecuRuntimeContext) -> bool {
         }
     };
 
-    // Build callback context
-    // For now shm_vars points to NULL — will be computed from SHM header
-    // offset when vecu-shm integration is wired (P4+).
+    // Compute shm_vars pointer from the SHM header (off_vars / size_vars).
+    let (shm_vars, shm_vars_size) = if !ctx.shm_base.is_null()
+        && ctx.shm_size as usize >= core::mem::size_of::<vecu_abi::VecuShmHeader>()
+    {
+        #[allow(clippy::cast_ptr_alignment)]
+        let hdr: &vecu_abi::VecuShmHeader =
+            unsafe { &*(ctx.shm_base.cast::<vecu_abi::VecuShmHeader>()) };
+        if hdr.magic == vecu_abi::SHM_MAGIC
+            && hdr.off_vars + u64::from(hdr.size_vars) <= hdr.total_size
+        {
+            #[allow(clippy::cast_possible_truncation)]
+            let off = hdr.off_vars as usize;
+            (unsafe { ctx.shm_base.add(off) }, hdr.size_vars)
+        } else {
+            (core::ptr::null_mut(), 0_u32)
+        }
+    } else {
+        (core::ptr::null_mut(), 0_u32)
+    };
+
     let base_ctx = Box::new(context::VecuBaseContext::build(
-        core::ptr::null_mut(), // shm_vars (TODO: compute from off_vars)
-        0,                     // shm_vars_size
+        shm_vars,
+        shm_vars_size,
         ctx.tick_interval_us,
     ));
 

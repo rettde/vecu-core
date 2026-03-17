@@ -41,6 +41,10 @@ pub struct SimConfig {
     /// Variable / state block size in bytes.
     #[serde(default = "default_vars_size")]
     pub vars_size: u32,
+    /// Path to a file for persistent SHM (`NvM` data survives across runs).
+    /// When `None`, anonymous (heap-backed) memory is used.
+    #[serde(default)]
+    pub shm_file: Option<PathBuf>,
     /// Execution mode.
     #[serde(default)]
     pub mode: ExecMode,
@@ -300,8 +304,14 @@ pub fn run_simulation(config: &SimConfig) -> Result<(), LoaderError> {
         .map(|p| LoadedPlugin::load(p))
         .transpose()?;
 
-    // 2. Allocate shared memory.
-    let mut shm = SharedMemory::with_layout(config.shm_layout());
+    // 2. Allocate shared memory (file-backed for NvM persistence, or anonymous).
+    let mut shm = if let Some(ref shm_path) = config.shm_file {
+        tracing::info!(path = %shm_path.display(), "using file-backed SHM for NvM persistence");
+        SharedMemory::from_file(shm_path, config.shm_layout())
+            .map_err(|e| LoaderError::Config(format!("SHM file error: {e}")))?        
+    } else {
+        SharedMemory::with_layout(config.shm_layout())
+    };
     shm.validate().map_err(LoaderError::Abi)?;
 
     // 3. Build runtime context.

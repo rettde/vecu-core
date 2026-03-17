@@ -1,7 +1,7 @@
 //! Integration test: compile, link, and run Virtual-MCAL functional tests.
 //!
 //! This test builds `vmcal_functional_test.c` together with the actual
-//! Virtual-MCAL sources (Can.c, Eth.c, Fls.c, VMcal_Context.c) into an
+//! Virtual-MCAL sources (`Can.c`, `Eth.c`, `Fls.c`, `VMcal_Context.c`) into an
 //! executable, runs it, and asserts exit code 0.
 
 #![cfg(not(target_os = "windows"))]
@@ -59,13 +59,12 @@ fn vmcal_functional_tests_run() {
         .output()
         .expect("failed to invoke C compiler");
 
-    if !compile_output.status.success() {
-        let stderr = String::from_utf8_lossy(&compile_output.stderr);
-        let stdout = String::from_utf8_lossy(&compile_output.stdout);
-        panic!(
-            "Compilation failed:\nstdout: {stdout}\nstderr: {stderr}"
-        );
-    }
+    let compile_stdout = String::from_utf8_lossy(&compile_output.stdout);
+    let compile_stderr = String::from_utf8_lossy(&compile_output.stderr);
+    assert!(
+        compile_output.status.success(),
+        "Compilation failed:\nstdout: {compile_stdout}\nstderr: {compile_stderr}"
+    );
 
     let run_output = Command::new(exe_path.to_str().unwrap())
         .output()
@@ -73,14 +72,11 @@ fn vmcal_functional_tests_run() {
 
     let stdout = String::from_utf8_lossy(&run_output.stdout);
     let stderr = String::from_utf8_lossy(&run_output.stderr);
-
-    if !run_output.status.success() {
-        panic!(
-            "Functional test failed (exit code {:?}):\nstdout: {stdout}\nstderr: {stderr}",
-            run_output.status.code()
-        );
-    }
-
+    assert!(
+        run_output.status.success(),
+        "Functional test failed (exit code {:?}):\nstdout: {stdout}\nstderr: {stderr}",
+        run_output.status.code()
+    );
     assert!(
         stdout.contains("ALL PASSED"),
         "Expected 'ALL PASSED' in output, got:\nstdout: {stdout}\nstderr: {stderr}"

@@ -382,6 +382,17 @@ impl SharedMemory {
         &mut self.storage.as_mut_slice()[off..off + size]
     }
 
+    /// Raw pointer and size of the variable / state block.
+    ///
+    /// Used by `vecu-appl` to populate `vecu_base_context_t.shm_vars`.
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn vars_raw_parts(&mut self) -> (*mut u8, u32) {
+        let off = self.header().off_vars as usize;
+        let size = self.header().size_vars;
+        let ptr = self.storage.as_mut_slice()[off..].as_mut_ptr();
+        (ptr, size)
+    }
+
     // -- Validation ------------------------------------------------------
 
     /// Validate the SHM header: magic, ABI version, offsets within bounds.
