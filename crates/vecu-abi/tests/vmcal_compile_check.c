@@ -22,6 +22,10 @@
 #include "Gpt.h"
 #include "Mcu.h"
 #include "Fls.h"
+#include "Adc.h"
+#include "Pwm.h"
+#include "Wdg.h"
+#include "Lin.h"
 
 #include "Crypto_30_vHsm.h"
 
@@ -78,6 +82,18 @@ static void smoke_test_types(void) {
 
     MemIf_StatusType fls_st = MEMIF_UNINIT;
     (void)fls_st;
+
+    Adc_StatusType adc_st = ADC_IDLE;
+    (void)adc_st;
+
+    Pwm_DutyType pwm_d = 0;
+    (void)pwm_d;
+
+    Wdg_ModeType wdg_m = WDG_MODE_OFF;
+    (void)wdg_m;
+
+    Lin_StatusType lin_st = LIN_NOT_OK;
+    (void)lin_st;
 
     Crypto_30_vHsm_ConfigType hsm_cfg;
     hsm_cfg.numKeys = 20;

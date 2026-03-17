@@ -18,6 +18,10 @@ add_library(vmcal STATIC
     src/Gpt.c
     src/Mcu.c
     src/Fls.c
+    src/Adc.c
+    src/Pwm.c
+    src/Wdg.c
+    src/Lin.c
 )
 
 target_include_directories(vmcal PUBLIC

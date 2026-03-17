@@ -30,6 +30,7 @@ typedef struct {
     Os_TaskFuncType function;
     Os_TickType     cycleTicks;
     Os_TickType     offsetTicks;
+    uint8           priority;
     boolean         autostart;
 } Os_TaskConfigType;
 

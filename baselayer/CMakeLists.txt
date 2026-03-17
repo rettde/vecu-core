@@ -39,6 +39,8 @@ set(BASE_SOURCES
     src/WdgM.c
     src/CanTp.c
     src/DoIP.c
+    src/ComM.c
+    src/Nm.c
 )
 
 # ── Shared library ───────────────────────────────────────────────────

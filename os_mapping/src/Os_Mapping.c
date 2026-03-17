@@ -14,6 +14,7 @@ typedef struct {
     Os_TaskFuncType function;
     Os_TickType     cycleTicks;
     Os_TickType     offsetTicks;
+    uint8           priority;
     boolean         active;
     Os_EventMaskType events;
 } Os_TaskState;
@@ -64,6 +65,7 @@ void Os_Init(const Os_ConfigType* config) {
             ts->function    = tc->function;
             ts->cycleTicks  = tc->cycleTicks;
             ts->offsetTicks = tc->offsetTicks;
+            ts->priority    = tc->priority;
             ts->active      = tc->autostart;
             ts->events      = 0;
         }
@@ -152,20 +154,41 @@ static void process_alarms(void) {
     }
 }
 
+static boolean task_is_due(const Os_TaskState* ts, Os_TickType tick) {
+    if (!ts->active || ts->function == NULL) { return FALSE; }
+    if (ts->cycleTicks == 0) { return TRUE; }
+    return (tick >= ts->offsetTicks &&
+            ((tick - ts->offsetTicks) % ts->cycleTicks) == 0);
+}
+
 static void dispatch_tasks(Os_TickType tick) {
     uint16 i;
-    for (i = 0; i < g_num_tasks; i++) {
-        Os_TaskState* ts = &g_tasks[i];
-        if (!ts->active || ts->function == NULL) { continue; }
+    uint16 ready[OS_MAX_TASKS];
+    uint16 ready_count = 0;
+    uint16 j;
 
+    for (i = 0; i < g_num_tasks; i++) {
+        if (task_is_due(&g_tasks[i], tick)) {
+            ready[ready_count++] = i;
+        }
+    }
+
+    for (i = 1; i < ready_count; i++) {
+        uint16 key = ready[i];
+        uint8 key_prio = g_tasks[key].priority;
+        j = i;
+        while (j > 0 && g_tasks[ready[j - 1u]].priority > key_prio) {
+            ready[j] = ready[j - 1u];
+            j--;
+        }
+        ready[j] = key;
+    }
+
+    for (i = 0; i < ready_count; i++) {
+        Os_TaskState* ts = &g_tasks[ready[i]];
+        ts->function();
         if (ts->cycleTicks == 0) {
-            ts->function();
             ts->active = FALSE;
-        } else {
-            if (tick >= ts->offsetTicks &&
-                ((tick - ts->offsetTicks) % ts->cycleTicks) == 0) {
-                ts->function();
-            }
         }
     }
 }
