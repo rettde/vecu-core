@@ -81,6 +81,9 @@ vecu-core/
 ├── target-openbsw/         ← Eclipse OpenBSW integration (ADR-001)
 │   ├── include/            ← Shim + transport adapter headers
 │   └── src/                ← OpenBSW lifecycle bridge (C++14)
+├── target-microsar/        ← Vector MICROSAR integration (ADR-001)
+│   ├── include/            ← Shim + MCAL bridge headers
+│   └── src/                ← MICROSAR BSW lifecycle bridge (C11)
 ├── docs/
 │   ├── adr/                ← Architecture Decision Records (ADR-001…006)
 │   └── PROJECT_DESCRIPTION.md
@@ -327,6 +330,9 @@ vecu-core/
 ├── target-openbsw/         ← Eclipse OpenBSW Integration (ADR-001)
 │   ├── include/            ← Shim + Transport-Adapter-Header
 │   └── src/                ← OpenBSW-Lifecycle-Bridge (C++14)
+├── target-microsar/        ← Vector MICROSAR Integration (ADR-001)
+│   ├── include/            ← Shim + MCAL-Bridge-Header
+│   └── src/                ← MICROSAR BSW Lifecycle-Bridge (C11)
 ├── examples/sample_ecu/    ← Referenz-ECU-Projekt (3 SWCs, RTE, CMake, config)
 ├── HOWTO_ECU_INTEGRATION.md ← Integrationsanleitung fuer ECU-Projekte
 └── IMPLEMENTATION_PLAN.md  ← Phasenplan (P1–P7, abgeschlossen)
