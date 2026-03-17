@@ -26,11 +26,7 @@ fn detect_target_triple() -> String {
 #[test]
 fn vmcal_headers_compile() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let repo_root = manifest_dir
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap();
+    let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
 
     let abi_include = manifest_dir.join("include");
     let baselayer_include = repo_root.join("baselayer").join("include");
@@ -38,9 +34,7 @@ fn vmcal_headers_compile() {
     let vhsm_include = repo_root.join("vhsm_adapter").join("include");
     let os_include = repo_root.join("os_mapping").join("include");
 
-    let test_c = manifest_dir
-        .join("tests")
-        .join("vmcal_compile_check.c");
+    let test_c = manifest_dir.join("tests").join("vmcal_compile_check.c");
 
     let out_dir = std::env::temp_dir().join("vecu_vmcal_compile_test");
     std::fs::create_dir_all(&out_dir).expect("create temp dir");
@@ -69,11 +63,7 @@ fn vmcal_headers_compile() {
 #[test]
 fn vmcal_sources_compile() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let repo_root = manifest_dir
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap();
+    let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
 
     let abi_include = manifest_dir.join("include");
     let baselayer_include = repo_root.join("baselayer").join("include");
