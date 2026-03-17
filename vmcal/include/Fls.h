@@ -29,8 +29,13 @@ typedef enum {
     MEMIF_BLOCK_INVALID      = 5u
 } MemIf_JobResultType;
 
+typedef void (*Fls_JobEndNotificationType)(void);
+typedef void (*Fls_JobErrorNotificationType)(void);
+
 typedef struct {
     uint32 flashSize;
+    Fls_JobEndNotificationType   jobEndNotification;
+    Fls_JobErrorNotificationType jobErrorNotification;
 } Fls_ConfigType;
 
 void               Fls_Init(const Fls_ConfigType* ConfigPtr);
@@ -40,6 +45,7 @@ Std_ReturnType     Fls_Read(Fls_AddressType SourceAddress,
 Std_ReturnType     Fls_Write(Fls_AddressType TargetAddress,
                              const uint8* SourceAddressPtr, Fls_LengthType Length);
 Std_ReturnType     Fls_Erase(Fls_AddressType TargetAddress, Fls_LengthType Length);
+void               Fls_Cancel(void);
 MemIf_StatusType   Fls_GetStatus(void);
 MemIf_JobResultType Fls_GetJobResult(void);
 void               Fls_MainFunction(void);
