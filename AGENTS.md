@@ -15,6 +15,9 @@ MIT OR Apache-2.0.
 |-------|----------|----------|----------|
 | Runtime + Plugins | Rust | Edition 2021, MSRV 1.75 | `crates/` |
 | BaseLayer (24 BSW stubs) | C | C11, no external deps | `baselayer/` |
+| Virtual-MCAL (ADR-002) | C | C11, no external deps | `vmcal/` |
+| vHsm Adapter (ADR-003) | C | C11, no external deps | `vhsm_adapter/` |
+| OS-Semantics Mapping (ADR-004) | C | C11, no external deps | `os_mapping/` |
 | Sample ECU application | C | C11 | `examples/sample_ecu/` |
 
 ---
@@ -90,6 +93,16 @@ Memory: NvM (SHM-backed), Fee, MemIf
 Crypto: Cry, CryIf, Csm (→ HSM callbacks)  
 Safety: WdgM  
 Runtime: Rte (project-specific stubs)
+
+### Level-3 C Layers (ADR-001…006)
+
+| Layer | Location | Modules | Backing |
+|-------|----------|---------|---------|
+| Virtual-MCAL | `vmcal/` | Can, Eth, Fr, Dio, Port, Spi, Gpt, Mcu, Fls | `vecu_base_context_t` callbacks |
+| vHsm Adapter | `vhsm_adapter/` | Crypto_30_vHsm | HSM encrypt/decrypt/MAC/RNG |
+| OS Mapping | `os_mapping/` | Os_Mapping (tasks, alarms, counters, events) | Tick-based deterministic dispatch |
+
+Build with `-DVECU_BUILD=ON` to include these layers (top-level `CMakeLists.txt`).
 
 ---
 

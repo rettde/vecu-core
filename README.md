@@ -69,12 +69,21 @@ vecu-core/
 │   ├── vecu-hsm/            ← HSM plugin (cdylib): AES-128, CMAC, SecurityAccess
 │   ├── vecu-silkit/         ← Vector SIL Kit FFI: multi-bus controllers
 │   └── vecu-loader/         ← CLI: plugin loading, ABI negotiation, simulation
+├── vmcal/                  ← Virtual-MCAL Layer (ADR-002, C11)
+│   ├── include/            ← MCAL-compatible headers (Can, Eth, Fr, Dio, …)
+│   └── src/                ← Implementations routing to vecu-core runtime
+├── vhsm_adapter/           ← vHsm Adapter (ADR-003, C11)
+│   ├── include/            ← Crypto_30_vHsm-compatible API
+│   └── src/                ← Delegates to vecu-core HSM callbacks
+├── os_mapping/             ← OS-Semantics Mapping (ADR-004, C11)
+│   ├── include/            ← Task, Alarm, Counter, Event types
+│   └── src/                ← Deterministic tick-based dispatch
 ├── docs/
-│   ├── adr/                 ← Architecture Decision Records
+│   ├── adr/                ← Architecture Decision Records (ADR-001…006)
 │   └── PROJECT_DESCRIPTION.md
-├── examples/sample_ecu/     ← Reference ECU project (3 SWCs, RTE, CMake, config)
+├── examples/sample_ecu/    ← Reference ECU project (3 SWCs, RTE, CMake, config)
 ├── HOWTO_ECU_INTEGRATION.md ← Integration guide for ECU projects
-└── IMPLEMENTATION_PLAN.md   ← Phase plan (P1–P7, completed)
+└── IMPLEMENTATION_PLAN.md  ← Phase plan (P1–P7, completed)
 ```
 
 ---
@@ -303,9 +312,18 @@ vecu-core/
 │   ├── vecu-hsm/            ← HSM-Plugin (cdylib): AES-128, CMAC, SecurityAccess
 │   ├── vecu-silkit/         ← Vector SIL Kit FFI: Multi-Bus-Controller
 │   └── vecu-loader/         ← CLI: Plugin-Loading, ABI-Negotiation, Simulation
-├── examples/sample_ecu/     ← Referenz-ECU-Projekt (3 SWCs, RTE, CMake, config)
-├── HOWTO_ECU_INTEGRATION.md ← Integrationsanleitung für ECU-Projekte
-└── IMPLEMENTATION_PLAN.md   ← Phasenplan (P1–P7, abgeschlossen)
+├── vmcal/                  ← Virtual-MCAL Layer (ADR-002, C11)
+│   ├── include/            ← MCAL-kompatible Header (Can, Eth, Fr, Dio, …)
+│   └── src/                ← Implementierungen, routen auf vecu-core Runtime
+├── vhsm_adapter/           ← vHsm-Adapter (ADR-003, C11)
+│   ├── include/            ← Crypto_30_vHsm-kompatible API
+│   └── src/                ← Delegiert an vecu-core HSM-Callbacks
+├── os_mapping/             ← OS-Semantics Mapping (ADR-004, C11)
+│   ├── include/            ← Task-, Alarm-, Counter-, Event-Typen
+│   └── src/                ← Deterministischer Tick-basierter Dispatch
+├── examples/sample_ecu/    ← Referenz-ECU-Projekt (3 SWCs, RTE, CMake, config)
+├── HOWTO_ECU_INTEGRATION.md ← Integrationsanleitung fuer ECU-Projekte
+└── IMPLEMENTATION_PLAN.md  ← Phasenplan (P1–P7, abgeschlossen)
 ```
 
 ## BaseLayer — 24 AUTOSAR BSW-Module
