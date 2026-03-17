@@ -10,7 +10,7 @@ AUTOSAR Classic ECU source code and want to run it as a virtual ECU.
 - Generated or hand‑written RTE headers for the target ECU
 - Basic knowledge of AUTOSAR BSW module APIs
 - C compiler (gcc, clang, or MSVC)
-- CMake ≥ 3.16
+- CMake ≥ 3.16 (≥ 3.28 for OpenBSW target)
 - Rust toolchain (for building the vECU runtime)
 
 ---
@@ -28,8 +28,9 @@ AUTOSAR Classic ECU source code and want to run it as a virtual ECU.
 9. [SecurityAccess with HSM](#9-securityaccess-with-hsm)
 10. [Troubleshooting](#10-troubleshooting)
 11. [Differences from Vector VTT](#11-differences-from-vector-vtt)
-12. [Using the Vector AUTOSAR BSW Instead of Stubs](#12-using-the-vector-autosar-bsw-instead-of-stubs)
-13. [Using Eclipse OpenBSW as an Open‑Source BaseLayer](#13-using-eclipse-openbsw-as-an-open-source-baselayer)
+12. [Using Vector MICROSAR as BaseLayer (Detailed)](#12-using-vector-microsar-as-baselayer-detailed)
+13. [Using Eclipse OpenBSW as BaseLayer](#13-using-eclipse-openbsw-as-baselayer)
+14. [Level‑3 Architecture: Virtual‑MCAL, vHsm, OS‑Mapping](#14-level-3-architecture-virtual-mcal-vhsm-os-mapping)
 
 ---
 
@@ -37,35 +38,64 @@ AUTOSAR Classic ECU source code and want to run it as a virtual ECU.
 
 The vECU execution system runs your ECU application code on a host PC
 (Windows, Linux, macOS) in a deterministic, tick‑based simulation.
-The architecture has three layers:
+The Level‑3 architecture has four layers:
 
 ```
-┌─────────────────────────────────────────────┐
-│  vECU Runtime (Rust)                        │
-│  ┌───────────────────────────────────────┐  │
-│  │  vecu-appl (ABI Bridge)               │  │
-│  │  ┌─────────────────────────────────┐  │  │
-│  │  │  YOUR ECU C‑CODE                │  │  │  ← you provide this
-│  │  │  (libappl_ecu.so)               │  │  │
-│  │  └─────────────┬───────────────────┘  │  │
-│  │                │ calls BSW APIs        │  │
-│  │  ┌─────────────▼───────────────────┐  │  │
-│  │  │  BaseLayer (libbase.so)         │  │  │  ← we provide this
-│  │  │  AUTOSAR BSW stubs              │  │  │
-│  │  └─────────────────────────────────┘  │  │
-│  └───────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────┐  │
-│  │  vecu-hsm (SHE‑compatible crypto)     │  │  ← included
-│  └───────────────────────────────────────┘  │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│  vECU Runtime (Rust)                                     │
+│  vecu-loader, vecu-runtime, vecu-shm, vecu-silkit        │
+├──────────────────────────────────────────────────────────┤
+│  ABI Bridge (vecu-appl)                                  │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  YOUR ECU C‑CODE (SWCs + RTE)                      │  │  ← you provide
+│  │  libappl_ecu.so                                    │  │
+│  └───────────────────┬────────────────────────────────┘  │
+│                      │ calls AUTOSAR BSW APIs             │
+│  ┌───────────────────▼────────────────────────────────┐  │
+│  │  BaseLayer  ← choose one:                          │  │
+│  │    a) Stub BaseLayer      (baselayer/)             │  │  ← we provide
+│  │    b) Vector MICROSAR     (target-microsar/)       │  │  ← you provide
+│  │    c) Eclipse OpenBSW     (target-openbsw/)        │  │  ← open source
+│  └───────────────────┬────────────────────────────────┘  │
+│                      │ calls MCAL / Crypto / OS APIs      │
+│  ┌───────────────────▼────────────────────────────────┐  │
+│  │  Level‑3 Layers (ADR‑002…004)                      │  │
+│  │    Virtual‑MCAL    (vmcal/)       ← 9 drivers      │  │
+│  │    vHsm Adapter    (vhsm_adapter/) ← crypto        │  │
+│  │    OS‑Mapping      (os_mapping/)  ← scheduling     │  │
+│  └───────────────────┬────────────────────────────────┘  │
+│                      │ routes through vecu_base_context_t │
+│  ┌───────────────────▼────────────────────────────────┐  │
+│  │  vecu-hsm (AES‑128, CMAC, SecurityAccess, RNG)     │  │
+│  └────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────┘
 ```
+
+### Three BaseLayer Options
+
+| Option | Language | License | Best For |
+|--------|----------|---------|----------|
+| **Stub BaseLayer** | C11 | MIT/Apache‑2.0 | Prototyping, CI, unit tests |
+| **Vector MICROSAR** | C11 | Proprietary | Production‑accurate BSW, existing DaVinci projects |
+| **Eclipse OpenBSW** | C++14 | Apache‑2.0 | Open‑source, modern C++, POSIX host |
+
+All three options share the **same Level‑3 layers** below them:
+
+| Layer | Location | Replaces |
+|-------|----------|----------|
+| Virtual‑MCAL (9 drivers) | `vmcal/` | Hardware MCAL (Can, Eth, Fr, Dio, Port, Spi, Gpt, Mcu, Fls) |
+| vHsm Adapter | `vhsm_adapter/` | Crypto_30_vHsm hardware module |
+| OS‑Semantics Mapping | `os_mapping/` | AUTOSAR OS (tasks, alarms, counters, events) |
+
+### What You Provide vs. What We Provide
 
 | You provide | We provide |
 |-------------|------------|
-| `SwcXxx.c` — your SWC application logic | `libbase.so` — 24 AUTOSAR BSW module stubs |
-| `Rte_SwcXxx.h` — RTE headers (hand‑written or generated) | `libvecu_appl.so` — Rust ABI bridge |
-| `Appl_Entry.c` — lifecycle hooks (init / main / shutdown) | `libvecu_hsm.so` — SHE‑compatible AES‑128 crypto |
-| `Base_Entry.c` — signal, NvM, Dcm, CanTp configuration | `vecu‑loader` — tick‑based runtime + optional SIL Kit |
+| `SwcXxx.c` — your SWC application logic | BaseLayer (stub / MICROSAR shim / OpenBSW shim) |
+| `Rte_SwcXxx.h` — RTE headers (generated or hand‑written) | Virtual‑MCAL, vHsm Adapter, OS‑Mapping |
+| `Appl_Entry.c` — lifecycle hooks (init / main / shutdown) | `libvecu_appl.so` — Rust ABI bridge |
+| `Base_Entry.c` — signal/NvM/Dcm configuration (stub only) | `libvecu_hsm.so` — SHE‑compatible AES‑128 crypto |
+| MICROSAR delivery (optional, if using MICROSAR) | `vecu‑loader` — tick‑based runtime + optional SIL Kit |
 
 ---
 
@@ -82,12 +112,13 @@ The architecture has three layers:
 
 ### What You Do NOT Need
 
-- AUTOSAR BSW source code (we provide stubs)
-- MCAL drivers (replaced by BaseLayer)
-- OS configuration (replaced by deterministic tick)
+- AUTOSAR BSW source code (we provide stubs, or use MICROSAR/OpenBSW)
+- MCAL drivers (replaced by Virtual‑MCAL — `vmcal/`)
+- Crypto hardware (replaced by vHsm Adapter — `vhsm_adapter/`)
+- OS configuration (replaced by OS‑Mapping — `os_mapping/`)
 - Compiler‑specific startup code
 - Linker scripts
-- Any Vector tooling
+- Vector tooling (unless using MICROSAR, see Section 12)
 
 ### Preparing Your C‑Code
 
@@ -264,32 +295,63 @@ See section 7 below.
 
 ## 4. Building the BaseLayer
 
-The BaseLayer is provided as C source code and builds into a shared
-library. You typically build it once and reuse it across ECU projects.
+You have three BaseLayer options. Each produces a shared library
+(`libbase.so` / `.dylib` / `.dll`) that the vECU loader loads at runtime.
+
+### Option A: Stub BaseLayer (Default)
+
+Best for prototyping, CI, and unit testing. No external dependencies.
 
 ```bash
-# Clone the repository
 git clone https://github.com/rettde/vecu-core.git
 cd vecu-core
 
-# Build the Rust workspace (runtime, ABI bridge, HSM)
+# Build the Rust workspace
 cargo build --release
 
-# Build the BaseLayer
-cd baselayer
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build .
-
-# Result:
-#   Linux:   libbase.so
-#   macOS:   libbase.dylib
-#   Windows: base.dll
+# Build the stub BaseLayer
+cmake -S examples/sample_ecu -B build/sample_ecu -DCMAKE_BUILD_TYPE=Release
+cmake --build build/sample_ecu
 ```
 
-All 24 BSW modules (EcuM, SchM, Os, Det, Com, PduR, CanIf, LinIf, EthIf,
-FrIf, Cry, CryIf, Csm, NvM, Fee, MemIf, Dem, Dcm, FiM, WdgM, CanTp, DoIP)
-are always compiled. There are no optional CMake flags.
+All 24 BSW modules are always compiled. No optional flags.
+
+### Option B: Vector MICROSAR
+
+Best for production‑accurate BSW behaviour. Requires a licensed MICROSAR
+delivery (see [Section 12](#12-using-vector-microsar-as-baselayer-detailed)).
+
+```bash
+cmake -S target-microsar -B build/target-microsar \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DMICROSAR_ROOT=/path/to/microsar/delivery
+
+cmake --build build/target-microsar
+# Result: libvecu_microsar_shim.so — use as base_layer in config.yaml
+```
+
+### Option C: Eclipse OpenBSW
+
+Best for fully open‑source stacks. Requires CMake ≥ 3.28, internet access
+at configure time (see [Section 13](#13-using-eclipse-openbsw-as-baselayer)).
+
+```bash
+cmake -S target-openbsw -B build/target-openbsw \
+    -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build/target-openbsw
+# Result: libvecu_openbsw_shim.so — use as base_layer in config.yaml
+```
+
+### Building the Level‑3 Layers (all options)
+
+The Virtual‑MCAL, vHsm Adapter, and OS‑Mapping are built automatically
+when using `target-microsar` or `target-openbsw`. For standalone use:
+
+```bash
+cmake -S . -B build/vecu -DVECU_BUILD=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build/vecu
+```
 
 ---
 
@@ -708,396 +770,686 @@ complexity and number of hardware‑dependent code sections.
 
 ---
 
-## 12. Using the Vector AUTOSAR BSW Instead of Stubs
+## 12. Using Vector MICROSAR as BaseLayer (Detailed)
 
-If you have a licensed Vector AUTOSAR BSW (from a DaVinci Configurator
-project / SIP), you can use it **instead of our stub BaseLayer**. This
-gives you production‑grade BSW behaviour (real scheduling, full NvM state
-machine, etc.) while still running on the host PC via the vECU runtime.
+This section provides a **complete, step‑by‑step guide** for integrating
+a Vector MICROSAR BSW delivery into vecu‑core. It covers the full
+workflow from DaVinci Configurator to running SWCs on the host PC.
 
-### Concept
+> **No proprietary code is stored in the vecu‑core repository.**
+> MICROSAR sources must be provided via the `MICROSAR_ROOT` build variable.
+
+### 12.1 Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│  vECU Runtime (Rust)                        │
-│  ┌───────────────────────────────────────┐  │
-│  │  vecu-appl (ABI Bridge)               │  │
-│  │  ┌─────────────────────────────────┐  │  │
-│  │  │  YOUR ECU C‑CODE (SWCs)        │  │  │
-│  │  └─────────────┬───────────────────┘  │  │
-│  │                │ calls BSW APIs        │  │
-│  │  ┌─────────────▼───────────────────┐  │  │
-│  │  │  Vector AUTOSAR BSW            │  │  │  ← replaces libbase.so
-│  │  │  (Com, Dcm, NvM, SchM, …)     │  │  │
-│  │  │  + MCAL SiL stubs             │  │  │
-│  │  │  + Base_Entry.c (adapter)      │  │  │
-│  │  └─────────────────────────────────┘  │  │
-│  └───────────────────────────────────────┘  │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│  vECU Runtime (Rust)                                     │
+│  vecu-loader, vecu-runtime, vecu-shm                     │
+├──────────────────────────────────────────────────────────┤
+│  ABI Bridge (vecu-appl)                                  │
+│                                                          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  ECU Application (libappl_ecu.so)                  │  │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐           │  │
+│  │  │ SwcBody  │ │ SwcDiag  │ │ SwcComm  │  ← SWCs   │  │
+│  │  │ Ctrl     │ │          │ │          │           │  │
+│  │  └────┬─────┘ └────┬─────┘ └────┬─────┘           │  │
+│  │       │ Rte_Read    │ Rte_Call    │ Rte_Send        │  │
+│  │  ┌────▼─────────────▼────────────▼─────────────┐   │  │
+│  │  │  RTE (Generated by DaVinci RTE Generator)   │   │  │
+│  │  │  Rte_SwcBodyCtrl.h, Rte_SwcDiag.h, …       │   │  │
+│  │  └────┬────────────────────────────────────────┘   │  │
+│  └───────│────────────────────────────────────────────┘  │
+│          │ Com_ReceiveSignal, Dcm_*, NvM_*, Csm_*        │
+│  ┌───────▼────────────────────────────────────────────┐  │
+│  │  MICROSAR BSW (libvecu_microsar_shim.so)           │  │
+│  │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐    │  │
+│  │  │ EcuM │ │ Com  │ │ Dcm  │ │ NvM  │ │ Csm  │    │  │
+│  │  │ BswM │ │ PduR │ │ Dem  │ │ Fee  │ │ CryIf│    │  │
+│  │  │ SchM │ │ CanIf│ │ CanTp│ │ MemIf│ │      │    │  │
+│  │  └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘    │  │
+│  │     │ MCAL   │ MCAL   │        │ MCAL   │ Crypto  │  │
+│  └─────│────────│────────│────────│────────│─────────┘  │
+│        ▼        ▼        ▼        ▼        ▼            │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │  Level‑3 Layers (Virtual‑MCAL + vHsm + OS‑Map)  │   │
+│  │  Can.c  Eth.c  Fr.c   Fls.c  Crypto_30_vHsm.c  │   │
+│  │  Dio.c  Port.c Spi.c  Gpt.c  Mcu.c             │   │
+│  └──────────────────────┬───────────────────────────┘   │
+│                         │ vecu_base_context_t            │
+│  ┌──────────────────────▼───────────────────────────┐   │
+│  │  vecu-hsm (AES‑128, CMAC, RNG, SecurityAccess)  │   │
+│  └──────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────┘
 ```
 
-The key difference: **the Vector BSW replaces `libbase.so`** entirely.
-Your SWC code stays the same — it calls the same AUTOSAR APIs either way.
+### 12.2 Prerequisites
 
-### Prerequisites
+| Requirement | Details |
+|-------------|---------|
+| **DaVinci Configurator** | Version ≥ 5.x, project with valid ECUC |
+| **MICROSAR SIP** | Software Integration Package for your µC family |
+| **Generated BSW code** | Run "Generate" in DaVinci — produces `BSW/` and `GenData/` |
+| **DaVinci RTE Generator** | For generating `Rte_*.h` and `Rte_*.c` from SWC descriptions |
+| **Compiler** | gcc, clang, or MSVC (host‑PC, not cross‑compiler) |
+| **CMake** | ≥ 3.15 |
+| **vecu‑core checkout** | `git clone https://github.com/rettde/vecu-core.git` |
 
-- **DaVinci Configurator** project with generated BSW source code
-- **Vector SIP** (Software Integration Package) for your µC family
-- **MCAL SiL stubs** from Vector (VTT MCAL) or your own stubs
-- A compiler that can build the Vector BSW for the host (gcc/clang/MSVC)
+### 12.3 DaVinci Configurator Workflow
 
-### Step 1: Create the Adapter (`Base_Entry.c`)
+#### Step 1: Create or Open DaVinci Project
 
-The vECU runtime expects three exported functions. You write a thin
-adapter that maps them to the Vector BSW lifecycle:
+Open your existing DaVinci Configurator project (or create a new one
+for a SiL target). The project must have a valid ECUC configuration.
+
+#### Step 2: Configure BSW Modules for SiL
+
+Adjust the following settings for host‑PC execution:
+
+| Module | Setting | Value for SiL |
+|--------|---------|---------------|
+| **EcuM** | `EcuMGeneral/EcuMMainFunctionPeriod` | Match your tick interval (e.g. 1 ms) |
+| **Os** | not needed | Replaced by OS‑Mapping (`os_mapping/`) |
+| **Can** | `CanGeneral/CanHardwareObjectCount` | Keep as‑is (Virtual‑MCAL handles all HTH/HRH) |
+| **NvM** | `NvMCommon/NvMDevicePath` | irrelevant (SHM‑backed via Virtual‑MCAL Fls) |
+| **Csm** | `CsmJobs` | Keep as‑is (vHsm Adapter handles all jobs) |
+| **Dcm** | `DcmDsd/DcmDsdServiceTable` | Keep all DIDs/routines |
+| **Dem** | DTC configuration | Keep as‑is |
+
+#### Step 3: Generate BSW Code
+
+In DaVinci Configurator:
+1. **Validate** — resolve all errors
+2. **Generate** — produces `BSW/` and `GenData/` directories
+3. The output should look like:
+
+```
+MICROSAR_ROOT/
+├── BSW/
+│   ├── EcuM/
+│   │   ├── EcuM.c
+│   │   ├── EcuM.h
+│   │   ├── EcuM_Cbk.h
+│   │   └── EcuM_Callout_Stubs.c
+│   ├── BswM/
+│   ├── SchM/
+│   ├── Com/
+│   ├── PduR/
+│   ├── CanIf/
+│   ├── CanTp/
+│   ├── Dcm/
+│   ├── Dem/
+│   ├── NvM/
+│   ├── Fee/
+│   ├── MemIf/
+│   ├── Csm/
+│   ├── CryIf/
+│   ├── Det/
+│   ├── FiM/
+│   └── WdgM/
+├── GenData/
+│   ├── Com_Cfg.c
+│   ├── Com_Cfg.h
+│   ├── Dcm_Cfg.c
+│   ├── PduR_Cfg.c
+│   ├── CanIf_Cfg.c
+│   ├── NvM_Cfg.c
+│   ├── EcuM_Cfg.c
+│   ├── BswM_Cfg.c
+│   ├── SchM_*.h           ← generated scheduler headers
+│   └── ...
+├── Include/                ← common MICROSAR headers
+│   ├── Std_Types.h
+│   ├── ComStack_Types.h
+│   ├── MemMap.h
+│   └── Compiler.h
+└── MCAL/                   ← REPLACED by Virtual‑MCAL
+```
+
+#### Step 4: Generate RTE Code
+
+In DaVinci RTE Generator (or embedded in DaVinci Developer):
+1. Import your **SWC descriptions** (`.arxml` files)
+2. Map SWC ports to BSW module services
+3. Generate — produces `Rte_*.h` and `Rte_*.c` files
+
+### 12.4 SWC Integration (Detailed)
+
+#### Typical SWC Structure
+
+An AUTOSAR SWC has **Runnables** (callable functions) connected to the
+RTE via **Ports** (sender/receiver for signals, client/server for services).
+
+```
+┌─────────────────────────────────────────────────────┐
+│  SwcBodyCtrl                                         │
+│                                                      │
+│  Ports:                                              │
+│    [R] RpVehicleSpeed    ← Rte_Read (from Com)       │
+│    [R] RpDoorStatus      ← Rte_Read (from Com)       │
+│    [P] PpLightCommand    ← Rte_Write (to Com)        │
+│    [CS] CsCsmEncrypt     ← Rte_Call (to Csm)         │
+│    [CS] CsNvmRead        ← Rte_Call (to NvM)         │
+│                                                      │
+│  Runnables:                                          │
+│    SwcBodyCtrl_Init()             ← called once       │
+│    SwcBodyCtrl_MainFunction()     ← cyclic (10 ms)    │
+│    SwcBodyCtrl_OnDoorEvent()      ← event‑triggered   │
+└─────────────────────────────────────────────────────┘
+```
+
+#### SWC Source File
 
 ```c
-/* Base_Entry.c — Adapter for Vector AUTOSAR BSW */
-#include "vecu_base_context.h"
-#include "EcuM.h"
-#include "SchM.h"
-#include "BswM.h"
+/* SwcBodyCtrl.c — Body Controller SWC */
+#include "Rte_SwcBodyCtrl.h"
 
-static const vecu_base_context_t* g_ctx = NULL;
+static uint8 g_lightState = 0;
 
-const vecu_base_context_t* Base_GetCtx(void) { return g_ctx; }
-
-#ifdef _WIN32
-  #define EXPORT __declspec(dllexport)
-#else
-  #define EXPORT __attribute__((visibility("default")))
-#endif
-
-EXPORT void Base_Init(const vecu_base_context_t* ctx) {
-    g_ctx = ctx;
-    /* Vector BSW init sequence (order from EcuM_Init / EcuM_StartupTwo) */
-    EcuM_Init();          /* calls SchM_Init, Det_Init, BswM_Init, … */
-    /* EcuM_StartupTwo is typically called by the Os — trigger it: */
-    EcuM_StartupTwo();
-}
-
-EXPORT void Base_Step(uint64_t tick) {
-    /* Drive the SchM main‑function schedule.
-     * In production, the Os does this via tasks.
-     * Here we call one "tick" worth of processing: */
-    SchM_MainFunction();
-    BswM_MainFunction();
-    /* Add any other periodic MainFunctions your config needs */
-}
-
-EXPORT void Base_Shutdown(void) {
-    EcuM_GoSleep();
-    EcuM_GoDown();
-    g_ctx = NULL;
-}
-```
-
-> **Note:** The exact init sequence depends on your DaVinci configuration.
-> Check your `EcuM_Callout_Stubs.c` for the correct order.
-
-### Step 2: Provide MCAL SiL Stubs
-
-The Vector BSW calls MCAL drivers (CAN driver, SPI, GPT, etc.) which
-don't exist on the host PC. You need stub implementations:
-
-| MCAL Module | What the Stub Does |
-|-------------|-------------------|
-| `Can` | Routes TX frames via `g_ctx->push_tx_frame()` |
-| `CanTrcv` | Returns E_OK (transceiver always on) |
-| `Gpt` | Maps to host timer or `Os_GetTick()` |
-| `Spi` | No‑op or returns E_OK |
-| `Fls` | Maps to SHM vars block (like our NvM) |
-| `Port`, `Dio` | No‑op stubs |
-
-Vector provides **VTT MCAL stubs** for exactly this purpose. If you have
-a VTT license, use `Vtt_Can.c`, `Vtt_Fls.c`, etc. Otherwise, write
-minimal stubs yourself — typically 5–20 lines per module.
-
-**Critical:** The CAN driver stub must bridge to `vecu_base_context_t`:
-
-```c
-/* Can_SiL.c — CAN driver stub for host simulation */
-#include "vecu_base_context.h"
-#include "Can.h"
-
-extern const vecu_base_context_t* Base_GetCtx(void);
-
-Std_ReturnType Can_Write(Can_HwHandleType hth,
-                         const Can_PduType* pduInfo)
+void SwcBodyCtrl_Init(void)
 {
-    const vecu_base_context_t* ctx = Base_GetCtx();
-    if (ctx == NULL || ctx->push_tx_frame == NULL) return E_NOT_OK;
+    g_lightState = 0;
+}
 
-    vecu_frame_t frame = {0};
-    frame.id   = pduInfo->id;
-    frame.dlc  = pduInfo->length;
-    frame.bus  = VECU_BUS_CAN;
-    if (pduInfo->length > 0 && pduInfo->length <= MAX_FRAME_DATA) {
-        memcpy(frame.data, pduInfo->sdu, pduInfo->length);
+void SwcBodyCtrl_MainFunction(void)
+{
+    uint16 vehicleSpeed = 0;
+    uint8  doorStatus   = 0;
+
+    /* Read signals via RTE (→ Com → CanIf → Virtual‑MCAL Can) */
+    (void)Rte_Read_RpVehicleSpeed_VehicleSpeed(&vehicleSpeed);
+    (void)Rte_Read_RpDoorStatus_DoorStatus(&doorStatus);
+
+    /* Application logic */
+    if (vehicleSpeed > 10 && doorStatus != 0) {
+        g_lightState = 1; /* Warning light ON */
+    } else {
+        g_lightState = 0;
     }
-    ctx->push_tx_frame(&frame);
-    return E_OK;
+
+    /* Write signal via RTE (→ Com → CanIf → Virtual‑MCAL Can → SIL Kit) */
+    (void)Rte_Write_PpLightCommand_LightCommand(&g_lightState);
+}
+
+void SwcBodyCtrl_OnDoorEvent(void)
+{
+    uint8 doorStatus = 0;
+    (void)Rte_Read_RpDoorStatus_DoorStatus(&doorStatus);
+    /* … event handling … */
 }
 ```
 
-### Step 3: Build as Shared Library
+#### Generated RTE Header (from DaVinci)
 
-```cmake
-cmake_minimum_required(VERSION 3.16)
-project(vector_base C)
+```c
+/* Rte_SwcBodyCtrl.h — Generated by DaVinci RTE Generator */
+#ifndef RTE_SWCBODYCTRL_H
+#define RTE_SWCBODYCTRL_H
 
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+#include "Rte_Type.h"
+#include "Rte_DataHandleType.h"
 
-# Vector BSW generated sources
-file(GLOB VECTOR_BSW_SOURCES
-    "${DAVINCI_GEN_DIR}/source/*.c"
-)
+/* Signal Read (Sender/Receiver) */
+#define Rte_Read_RpVehicleSpeed_VehicleSpeed(data) \
+    (Rte_Read_SwcBodyCtrl_RpVehicleSpeed_VehicleSpeed(data))
+extern Std_ReturnType Rte_Read_SwcBodyCtrl_RpVehicleSpeed_VehicleSpeed(
+    uint16* data);
 
-# MCAL SiL stubs
-set(MCAL_STUBS
-    stubs/Can_SiL.c
-    stubs/Fls_SiL.c
-    stubs/Gpt_SiL.c
-    # …
-)
+#define Rte_Read_RpDoorStatus_DoorStatus(data) \
+    (Rte_Read_SwcBodyCtrl_RpDoorStatus_DoorStatus(data))
+extern Std_ReturnType Rte_Read_SwcBodyCtrl_RpDoorStatus_DoorStatus(
+    uint8* data);
 
-add_library(base SHARED
-    Base_Entry.c          # our adapter
-    ${VECTOR_BSW_SOURCES}
-    ${MCAL_STUBS}
-)
+/* Signal Write */
+#define Rte_Write_PpLightCommand_LightCommand(data) \
+    (Rte_Write_SwcBodyCtrl_PpLightCommand_LightCommand(data))
+extern Std_ReturnType Rte_Write_SwcBodyCtrl_PpLightCommand_LightCommand(
+    const uint8* data);
 
-target_include_directories(base PRIVATE
-    ${DAVINCI_GEN_DIR}/include
-    ${VECTOR_SIP_DIR}/BSW/include
-    ${VECU_CORE_DIR}/crates/vecu-abi/include
-)
+/* Client/Server: Crypto */
+#define Rte_Call_CsCsmEncrypt_Encrypt(jobId, mode, in, inLen, out, outLen) \
+    (Csm_Encrypt((jobId), (mode), (in), (inLen), (out), (outLen)))
 
-target_compile_options(base PRIVATE -fvisibility=default)
+/* Client/Server: NvM */
+#define Rte_Call_CsNvmRead_ReadBlock(blockId, dst) \
+    (NvM_ReadBlock((blockId), (dst)))
+
+#endif /* RTE_SWCBODYCTRL_H */
 ```
 
-### Step 4: Use in config.yaml
+> **Tip:** If you don't have DaVinci RTE Generator, you can write these
+> headers by hand. The macros simply map `Rte_Read_*` / `Rte_Write_*` /
+> `Rte_Call_*` to the underlying BSW API (`Com_*`, `Csm_*`, `NvM_*`).
 
-```yaml
-appl:
-  bridge: "vecu-core/target/release/libvecu_appl.dylib"
-  base_layer: "vector_base/build/libbase.dylib"   # ← Vector BSW
-  ecu_code: "my_ecu/build/libappl_ecu.dylib"
+#### Diagnostic SWC Example
+
+```c
+/* SwcDiag.c — Diagnostic SWC with SecurityAccess */
+#include "Rte_SwcDiag.h"
+
+void SwcDiag_Init(void) { /* nothing */ }
+
+void SwcDiag_MainFunction(void)
+{
+    /* Dcm processes requests internally via CanTp → PduR → Dcm.
+     * The SWC only needs to provide DID read/write callbacks
+     * and routine control callbacks, registered via Dcm_Cfg.c. */
+}
+
+/* DID 0xF190 — VIN Read (called by Dcm) */
+Std_ReturnType SwcDiag_ReadVin(uint8* data, uint16* length)
+{
+    *length = 17;
+    return Rte_Call_CsNvmRead_ReadBlock(0, data);
+}
+
+/* DID 0xF190 — VIN Write (called by Dcm) */
+Std_ReturnType SwcDiag_WriteVin(const uint8* data, uint16 length)
+{
+    (void)length;
+    return Rte_Call_CsNvmWrite_WriteBlock(0, data);
+}
 ```
 
-The rest of the workflow (SWC code, RTE headers, `config.yaml`,
-`vecu‑loader`) stays **exactly the same**.
+#### Communication SWC Example
 
-### When to Use Stubs vs. Vector BSW
+```c
+/* SwcComm.c — Communication Manager SWC */
+#include "Rte_SwcComm.h"
+
+static uint8 g_commMode = 0; /* 0=OFF, 1=SILENT, 2=FULL */
+
+void SwcComm_Init(void)
+{
+    g_commMode = 2; /* FULL communication */
+}
+
+void SwcComm_MainFunction(void)
+{
+    /* Monitor communication state, handle bus‑off recovery, etc. */
+    /* In vECU: Virtual‑MCAL Can driver handles bus state internally */
+}
+```
+
+### 12.5 Application Entry Point with MICROSAR
+
+```c
+/* Appl_Entry.c — Lifecycle hooks for MICROSAR‑based vECU */
+#include "Rte_SwcBodyCtrl.h"
+#include "Rte_SwcDiag.h"
+#include "Rte_SwcComm.h"
+
+void Appl_Init(void)
+{
+    SwcBodyCtrl_Init();
+    SwcDiag_Init();
+    SwcComm_Init();
+}
+
+void Appl_MainFunction(void)
+{
+    static uint32 tick_counter = 0;
+    tick_counter++;
+
+    /* 10 ms runnables (every tick if tick = 10 ms) */
+    SwcBodyCtrl_MainFunction();
+    SwcComm_MainFunction();
+
+    /* 100 ms runnables */
+    if (tick_counter % 10 == 0) {
+        SwcDiag_MainFunction();
+    }
+}
+
+void Appl_Shutdown(void)
+{
+    /* Cleanup — NvM write‑all is triggered by EcuM_GoSleep */
+}
+```
+
+### 12.6 Build with target‑microsar
+
+The `target-microsar/` directory is ready to use. Point it to your delivery:
+
+```bash
+cd vecu-core
+
+cmake -S target-microsar -B build/target-microsar \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DMICROSAR_ROOT=/path/to/your/microsar/delivery
+
+cmake --build build/target-microsar
+```
+
+This produces `libvecu_microsar_shim.so` which:
+- Initializes MICROSAR BSW (EcuM → SchM → BswM → Com → Dcm → …)
+- Calls `MCALBridge_Init()` to set up Virtual‑MCAL
+- Each tick: polls RX, drives all BSW MainFunctions
+- Shutdown: Com_DeInit → BswM_Deinit → EcuM_GoSleep
+
+### 12.7 What Gets Replaced (MCAL Bypass)
+
+The key insight: **MICROSAR's MCAL directory is entirely skipped**.
+Our Virtual‑MCAL provides API‑compatible replacements:
+
+| MICROSAR MCAL Module | Virtual‑MCAL Replacement | Backing |
+|---------------------|-------------------------|---------|
+| `Can` driver (HW) | `vmcal/src/Can.c` | `ctx->push_tx_frame` / `pop_rx_frame` |
+| `Eth` driver (HW) | `vmcal/src/Eth.c` | `ctx->push_tx_frame` / `pop_rx_frame` |
+| `Fr` driver (HW) | `vmcal/src/Fr.c` | `ctx->push_tx_frame` / `pop_rx_frame` |
+| `Fls` driver (HW) | `vmcal/src/Fls.c` | `ctx->shm_vars` (RAM‑backed) |
+| `Gpt` driver (HW) | `vmcal/src/Gpt.c` | Tick‑based timers |
+| `Mcu` driver (HW) | `vmcal/src/Mcu.c` | Init stubs |
+| `Dio` driver (HW) | `vmcal/src/Dio.c` | RAM‑backed channels |
+| `Port` driver (HW) | `vmcal/src/Port.c` | Init‑semantics only |
+| `Spi` driver (HW) | `vmcal/src/Spi.c` | Loopback / no‑op |
+| `Crypto_30_vHsm` | `vhsm_adapter/src/Crypto_30_vHsm.c` | `ctx->hsm_*` callbacks |
+| AUTOSAR OS | `os_mapping/src/Os_Mapping.c` | Deterministic tick dispatch |
+
+### 12.8 Data Flow Examples
+
+#### CAN Signal Reception (End‑to‑End)
+
+```
+SIL Kit / Standalone
+    │
+    ▼
+vecu-runtime (Rust)  →  ctx->pop_rx_frame()
+    │
+    ▼
+Virtual‑MCAL Can.c   →  Can_MainFunction_Read()
+    │                     stores frame in RX buffer
+    ▼
+MICROSAR CanIf       →  CanIf_RxIndication()
+    │
+    ▼
+MICROSAR PduR        →  PduR_CanIfRxIndication()
+    │
+    ▼
+MICROSAR Com         →  Com_RxIndication() → signal buffer update
+    │
+    ▼
+RTE                  →  Rte_Read_RpVehicleSpeed_VehicleSpeed()
+    │
+    ▼
+SWC                  →  SwcBodyCtrl_MainFunction() reads value
+```
+
+#### UDS Diagnostic Request (End‑to‑End)
+
+```
+Tester (CANoe / SIL Kit)
+    │  CAN ID 0x641: [02 22 F1 90 ...]
+    ▼
+Virtual‑MCAL Can.c   →  pop_rx_frame()
+    │
+    ▼
+MICROSAR CanIf       →  CanIf_RxIndication()
+    │
+    ▼
+MICROSAR CanTp       →  CanTp_RxIndication() → reassembly
+    │
+    ▼
+MICROSAR PduR        →  PduR_CanTpRxIndication()
+    │
+    ▼
+MICROSAR Dcm         →  Dcm_MainFunction() → DID 0xF190 dispatch
+    │
+    ▼
+SwcDiag              →  SwcDiag_ReadVin() → NvM_ReadBlock()
+    │
+    ▼
+MICROSAR NvM         →  NvM_MainFunction() → Fee → MemIf
+    │
+    ▼
+Virtual‑MCAL Fls.c   →  reads from ctx->shm_vars
+    │
+    ▼  (response flows back through Dcm → CanTp → Can → SIL Kit)
+```
+
+#### Crypto Operation (End‑to‑End)
+
+```
+SWC calls Rte_Call_CsCsmEncrypt_Encrypt(...)
+    │
+    ▼
+MICROSAR Csm         →  Csm_Encrypt() → job dispatch
+    │
+    ▼
+MICROSAR CryIf       →  CryIf_ProcessJob()
+    │
+    ▼
+vHsm Adapter         →  Crypto_30_vHsm_ProcessJob()
+    │                     delegates to ctx->hsm_encrypt()
+    ▼
+vecu-hsm (Rust)      →  AES‑128 encrypt (real crypto)
+    │
+    ▼  (result returned through callback chain)
+```
+
+### 12.9 Adapting to Your Specific Delivery
+
+Every MICROSAR delivery is project‑specific. Common adjustments:
+
+| Task | File | What to Change |
+|------|------|---------------|
+| BSW init order | `vecu_microsar_shim.c` | Match your `EcuM_Callout_Stubs.c` sequence |
+| Add BSW modules | `vecu_microsar_shim.c` | Add init/MainFunction calls for LinIf, FrIf, DoIP, … |
+| Extra include paths | `CMakeLists.txt` | Add paths to your delivery's subdirectories |
+| Compiler defines | `CMakeLists.txt` | Add `MICROSAR_*` defines from your DaVinci project |
+| GenData sources | `CMakeLists.txt` | Adjust `GLOB` pattern for your delivery structure |
+| MemMap.h | Your delivery | Provide empty `#define`s (no memory sections on host) |
+| Compiler.h | Your delivery | Map to host compiler (gcc/clang/MSVC) |
+| SchM_*.h | GenData | Ensure `SchM_Enter_*` / `SchM_Exit_*` are empty macros |
+
+### 12.10 When to Use MICROSAR vs. Stubs
 
 | Scenario | Recommendation |
 |----------|---------------|
-| Early development / prototyping | **Stubs** — faster build, no license needed |
-| SWC unit testing | **Stubs** — deterministic, simple |
-| CI / automated testing | **Stubs** — no Vector license on build server |
-| System‑level integration testing | **Vector BSW** — production‑accurate behaviour |
-| Pre‑SiL validation close to target | **Vector BSW** — real state machines |
-| Customer demos / acceptance tests | **Vector BSW** — matches target ECU |
+| Early SWC development | **Stubs** — faster build, no license needed |
+| SWC unit testing in CI | **Stubs** — no Vector license on build server |
+| System‑level integration | **MICROSAR** — production‑accurate BSW behaviour |
+| Pre‑SiL validation | **MICROSAR** — real state machines, real Dcm/Com |
+| Customer acceptance | **MICROSAR** — matches target ECU exactly |
+| NvM persistence testing | **MICROSAR** — full NvM/Fee state machine |
+| Full diagnostic stack | **MICROSAR** — real Dcm with all services |
 
-> **Tip:** You can maintain both setups in parallel. The SWC code and RTE
-> headers are identical — only `libbase.so` is swapped.
+> **Tip:** Maintain both setups in parallel. The SWC code and RTE headers
+> are identical — only the BaseLayer library is swapped in `config.yaml`.
 
 ---
 
-## 13. Using Eclipse OpenBSW as an Open‑Source BaseLayer
+## 13. Using Eclipse OpenBSW as BaseLayer
 
 [Eclipse OpenBSW](https://github.com/esrlabs/openbsw) is a professional,
 open‑source (Apache‑2.0) software platform for automotive microcontrollers
 developed by [ESRLabs](https://www.esrlabs.com/) under the Eclipse
 Foundation. It provides real BSW‑level functionality (async runtime,
-CAN, diagnostics, timers) and already supports a **POSIX target** that
-runs on the host PC.
+CAN, diagnostics, timers) and supports a **POSIX target** for host‑PC
+execution.
 
-OpenBSW can serve as a fully open‑source alternative to both our stub
-BaseLayer and the proprietary Vector BSW.
+The `target-openbsw/` directory provides a ready‑to‑use build that
+fetches OpenBSW via CMake `FetchContent` — **no manual clone needed**.
 
-### Key Differences from Our Stub BaseLayer
+### 13.1 Key Differences
 
-| Aspect | Our Stubs | Eclipse OpenBSW |
-|--------|-----------|-----------------|
-| **Language** | C11 | C++ (with Rust integration via Embassy) |
-| **API surface** | AUTOSAR function names (`Com_*`, `Dcm_*`, …) | Own C++ API (not AUTOSAR‑named) |
-| **Complexity** | Minimal stubs (state stored in arrays) | Real state machines, cooperative scheduling |
-| **License** | MIT / Apache‑2.0 | Apache‑2.0 |
-| **POSIX target** | Built for host‑PC from day one | Supported (`cmake --preset posix`) |
-| **Maintenance** | Part of vecu‑core | Eclipse Foundation + ESRLabs |
+| Aspect | Stub BaseLayer | Eclipse OpenBSW | MICROSAR |
+|--------|---------------|-----------------|----------|
+| **Language** | C11 | C++14 | C11 |
+| **API surface** | AUTOSAR names | Own C++ API | AUTOSAR names |
+| **Complexity** | Minimal stubs | Real state machines | Production BSW |
+| **License** | MIT/Apache‑2.0 | Apache‑2.0 | Proprietary |
+| **Build** | Simple CMake | FetchContent | External delivery |
 
-### Integration Concept
-
-Because OpenBSW uses its own API (not AUTOSAR function names), an
-**AUTOSAR shim layer** is needed between your SWC code and OpenBSW:
+### 13.2 Architecture
 
 ```
-┌───────────────────────────────────────────────────────┐
-│  vECU Runtime (Rust)                                  │
-│  ┌─────────────────────────────────────────────────┐  │
-│  │  vecu-appl (ABI Bridge)                         │  │
-│  │  ┌────────────────┐  ┌───────────────────────┐  │  │
-│  │  │  ECU C‑Code    │  │  AUTOSAR Shim (C)     │  │  │
-│  │  │  (SWCs)        │→ │  Com_*() → OpenBSW    │  │  │
-│  │  │                │  │  Dcm_*() → OpenBSW    │  │  │
-│  │  │                │  │  NvM_*() → OpenBSW    │  │  │
-│  │  └────────────────┘  └──────────┬────────────┘  │  │
-│  │                                 ↓                │  │
-│  │                      ┌────────────────────────┐  │  │
-│  │                      │  Eclipse OpenBSW       │  │  │
-│  │                      │  (C++, Apache‑2.0)     │  │  │
-│  │                      │  + Base_Entry.cpp       │  │  │
-│  │                      └────────────────────────┘  │  │
-│  └─────────────────────────────────────────────────┘  │
-└───────────────────────────────────────────────────────┘
+vecu-core Runtime (Rust)
+        │
+        ▼
+┌──────────────────────────────────┐
+│  vecu_openbsw_shim               │
+│  Base_Init / Base_Step / Shutdown│
+├──────────────────────────────────┤
+│  Eclipse OpenBSW (POSIX target)  │
+│  lifecycle, async, uds, docan,   │
+│  doip, cpp2can, cpp2ethernet,    │
+│  storage, timer, logger          │
+├──────────────────────────────────┤
+│  vecu_openbsw_transport          │
+│  CAN/ETH → ctx->push_tx_frame   │
+│  ctx->pop_rx_frame → CAN/ETH    │
+└──────────────────────────────────┘
 ```
 
-### Step 1: Clone and Build OpenBSW for POSIX
+### 13.3 Build
 
 ```bash
-git clone https://github.com/esrlabs/openbsw.git
-cd openbsw
+cd vecu-core
 
-# Build for host PC (POSIX target)
-cmake --preset posix
-cmake --build --preset posix
+cmake -S target-openbsw -B build/target-openbsw \
+    -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build/target-openbsw
 ```
 
-### Step 2: Create the Adapter (`Base_Entry.cpp`)
+CMake `FetchContent` pulls OpenBSW at configure time into `_deps/`.
+Requires CMake ≥ 3.28 and internet access at first configure.
 
-The adapter maps our three lifecycle functions to the OpenBSW runtime:
+Result: `libvecu_openbsw_shim.so` (or `.dylib` / `.dll`)
 
-```cpp
-// Base_Entry.cpp — Adapter for Eclipse OpenBSW
-extern "C" {
-#include "vecu_base_context.h"
-}
+### 13.4 How It Works
 
-// OpenBSW headers
-#include "async/AsyncBinding.h"
-#include "lifecycle/LifecycleManager.h"
+The shim layer (`target-openbsw/src/vecu_openbsw_shim.cpp`) bridges
+vecu‑core lifecycle calls to OpenBSW's internal lifecycle and async
+framework:
 
-static const vecu_base_context_t* g_ctx = nullptr;
+| vecu‑core Call | OpenBSW Action |
+|---------------|----------------|
+| `Base_Init(ctx)` | Store ctx, init lifecycle manager, start async runtime |
+| `Base_Step(tick)` | Execute one async cycle, poll RX frames, drive timers |
+| `Base_Shutdown()` | Shutdown lifecycle, stop async runtime |
 
-extern "C" {
+The transport adapter (`target-openbsw/src/vecu_openbsw_transport.cpp`)
+routes CAN and Ethernet frames:
 
-const vecu_base_context_t* Base_GetCtx(void) { return g_ctx; }
+| Direction | Flow |
+|-----------|------|
+| **TX** | OpenBSW cpp2can → `OpenBsw_TransmitCan()` → `ctx->push_tx_frame()` |
+| **RX** | `ctx->pop_rx_frame()` → `OpenBsw_PollRxFrames()` → OpenBSW cpp2can |
+| **ETH TX** | OpenBSW cpp2ethernet → `OpenBsw_TransmitEth()` → `ctx->push_tx_frame()` |
+| **ETH RX** | `ctx->pop_rx_frame()` → `OpenBsw_PollRxFrames()` → OpenBSW cpp2ethernet |
 
-#ifdef _WIN32
-  #define EXPORT __declspec(dllexport)
-#else
-  #define EXPORT __attribute__((visibility("default")))
-#endif
+### 13.5 OpenBSW Module Mapping
 
-EXPORT void Base_Init(const vecu_base_context_t* ctx) {
-    g_ctx = ctx;
-    // Initialize OpenBSW lifecycle
-    ::lifecycle::LifecycleManager::init();
-}
+OpenBSW uses its own C++ API. If your SWCs use AUTOSAR function names
+(`Com_ReceiveSignal`, `Dcm_*`, etc.), you need an AUTOSAR shim layer:
 
-EXPORT void Base_Step(uint64_t tick) {
-    (void)tick;
-    // Drive OpenBSW cooperative scheduling for one cycle
-    ::async::execute();
-}
+| AUTOSAR API | OpenBSW Equivalent |
+|-------------|-------------------|
+| `Com_ReceiveSignal()` | `::com::SignalManager::read()` |
+| `Com_SendSignal()` | `::com::SignalManager::write()` |
+| `Dcm_*` (diagnostics) | `::uds::UdsServer` |
+| `NvM_ReadBlock()` | `::storage::StorageManager::read()` |
+| `CanTp_*` | `::docan::DoCanTransport` |
+| `DoIP_*` | `::doip::DoIpServer` |
 
-EXPORT void Base_Shutdown(void) {
-    ::lifecycle::LifecycleManager::shutdown();
-    g_ctx = nullptr;
-}
-
-} // extern "C"
-```
-
-> **Note:** The exact OpenBSW API calls depend on your configuration.
-> Refer to the [OpenBSW documentation](https://eclipse-openbsw.github.io/openbsw)
-> for the current lifecycle and async API.
-
-### Step 3: Create the AUTOSAR Shim Layer
-
-The shim provides AUTOSAR‑named C functions that delegate to OpenBSW
-internals. Example for `Com_ReceiveSignal`:
-
-```c
-// autosar_shim/Com_Shim.c
-#include "Com.h"
-#include "openbsw_signal_bridge.h"  // your bridge header
-
-Std_ReturnType Com_ReceiveSignal(Com_SignalIdType id, void* value) {
-    return openbsw_signal_read(id, value);  // calls into OpenBSW
-}
-
-Std_ReturnType Com_SendSignal(Com_SignalIdType id, const void* value) {
-    return openbsw_signal_write(id, value);
-}
-```
-
-You need one shim file per BSW module your SWCs actually call. Typical
-set: `Com_Shim.c`, `Dcm_Shim.c`, `NvM_Shim.c`, `Dem_Shim.c`.
-
-### Step 4: Build as Shared Library
-
-```cmake
-cmake_minimum_required(VERSION 3.16)
-project(openbsw_base CXX C)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-# OpenBSW sources (built as POSIX target)
-add_subdirectory(${OPENBSW_DIR} openbsw_build)
-
-# AUTOSAR shim layer
-set(SHIM_SOURCES
-    autosar_shim/Com_Shim.c
-    autosar_shim/Dcm_Shim.c
-    autosar_shim/NvM_Shim.c
-)
-
-add_library(base SHARED
-    Base_Entry.cpp
-    ${SHIM_SOURCES}
-)
-
-target_link_libraries(base PRIVATE openbsw::platform)
-
-target_include_directories(base PRIVATE
-    ${OPENBSW_DIR}/libs
-    ${VECU_CORE_DIR}/crates/vecu-abi/include
-    ${VECU_CORE_DIR}/baselayer/include   # for Std_Types.h
-    autosar_shim
-)
-
-target_compile_options(base PRIVATE -fvisibility=default)
-```
-
-### Step 5: Use in config.yaml
+### 13.6 Use in config.yaml
 
 ```yaml
 appl:
   bridge: "vecu-core/target/release/libvecu_appl.dylib"
-  base_layer: "openbsw_base/build/libbase.dylib"   # ← OpenBSW
+  base_layer: "build/target-openbsw/libvecu_openbsw_shim.dylib"
   ecu_code: "my_ecu/build/libappl_ecu.dylib"
 ```
 
-### When to Use Which BaseLayer
+### 13.7 When to Use Which BaseLayer
 
-| Scenario | Stubs | Vector BSW | OpenBSW |
-|----------|-------|------------|---------|
-| Quick prototyping | ✅ Best | — | — |
+| Scenario | Stubs | MICROSAR | OpenBSW |
+|----------|-------|----------|---------|
+| Quick prototyping | ✅ Best | — | ✅ Good |
 | Unit tests / CI | ✅ Best | — | ✅ Good |
-| Fully open‑source stack | ✅ Good | ❌ No | ✅ Best |
+| Fully open‑source | ✅ Good | ❌ No | ✅ Best |
 | Production‑accurate BSW | — | ✅ Best | ✅ Good |
-| No AUTOSAR license at all | ✅ | ❌ | ✅ |
+| No AUTOSAR license | ✅ | ❌ | ✅ |
 | Existing Vector project | — | ✅ Best | — |
-| Rust + C++ mixed codebase | — | — | ✅ Best |
+| Modern C++ codebase | — | — | ✅ Best |
 
-> **Status:** OpenBSW integration is on the roadmap. The shim layer
-> (`vecu‑openbsw‑shim`) is planned as a separate repository. Contributions
-> welcome.
+---
+
+## 14. Level‑3 Architecture: Virtual‑MCAL, vHsm, OS‑Mapping
+
+All three BaseLayer options share the same **Level‑3 layers** below
+them (per ADR‑002, ADR‑003, ADR‑004). These layers abstract away hardware
+and OS dependencies so the BSW stack can run on a host PC.
+
+### 14.1 Virtual‑MCAL (`vmcal/`)
+
+9 AUTOSAR MCAL‑compatible drivers that route I/O through
+`vecu_base_context_t` instead of real hardware registers.
+
+| Module | Source | What It Does |
+|--------|--------|-------------|
+| **Can** | `vmcal/src/Can.c` | CAN TX/RX via `push_tx_frame` / `pop_rx_frame` |
+| **Eth** | `vmcal/src/Eth.c` | Ethernet TX/RX via `push_tx_frame` / `pop_rx_frame` |
+| **Fr** | `vmcal/src/Fr.c` | FlexRay TX/RX via `push_tx_frame` / `pop_rx_frame` |
+| **Dio** | `vmcal/src/Dio.c` | RAM‑backed digital I/O channels (64 channels) |
+| **Port** | `vmcal/src/Port.c` | Init‑semantics only (no real pin mux) |
+| **Spi** | `vmcal/src/Spi.c` | Loopback (TX→RX) or no‑op |
+| **Gpt** | `vmcal/src/Gpt.c` | Tick‑based timers with callback support |
+| **Mcu** | `vmcal/src/Mcu.c` | Init stubs (PLL, clock = no‑op on host) |
+| **Fls** | `vmcal/src/Fls.c` | Flash emulation via `ctx->shm_vars` (RAM) |
+
+**Usage:** The Virtual‑MCAL is initialized via `VMcal_SetCtx(ctx)` which
+stores the `vecu_base_context_t*` pointer. All modules then route through
+this context's function pointers.
+
+### 14.2 vHsm Adapter (`vhsm_adapter/`)
+
+A `Crypto_30_vHsm`‑compatible API that delegates all crypto operations
+to `vecu_base_context_t` HSM callbacks → `vecu-hsm` (real AES‑128).
+
+| Function | Delegates To | Operation |
+|----------|-------------|-----------|
+| `Crypto_30_vHsm_ProcessJob()` | `ctx->hsm_encrypt` | AES‑128 ECB/CBC encrypt |
+| | `ctx->hsm_decrypt` | AES‑128 ECB/CBC decrypt |
+| | `ctx->hsm_generate_mac` | AES‑128 CMAC generation |
+| | `ctx->hsm_verify_mac` | AES‑128 CMAC verification |
+| | `ctx->hsm_rng` | CSPRNG random bytes |
+
+The adapter supports AUTOSAR Crypto job types (`CRYPTO_ENCRYPT`,
+`CRYPTO_DECRYPT`, `CRYPTO_MACGENERATE`, `CRYPTO_MACVERIFY`,
+`CRYPTO_RANDOMGENERATE`) and routes them through the standard
+MICROSAR crypto stack: `Csm → CryIf → Crypto_30_vHsm → vecu-hsm`.
+
+### 14.3 OS‑Semantics Mapping (`os_mapping/`)
+
+Replaces the AUTOSAR OS with deterministic, tick‑based scheduling.
+
+| Feature | Implementation |
+|---------|---------------|
+| **Cyclic Tasks** | Dispatched by period (ms) at each tick |
+| **Event Tasks** | Triggered by `Os_Mapping_SetEvent()` |
+| **Counters** | Incremented each tick, trigger alarms at expiry |
+| **Alarms** | Cyclic or one‑shot, invoke callbacks |
+| **Resources** | `GetResource` / `ReleaseResource` (no real locking needed) |
+| **Lifecycle** | `STARTUP → RUN → SHUTDOWN` phases |
+
+**Key point:** All scheduling is **deterministic and sequential**.
+There are no threads, no preemption, no race conditions. This is ideal
+for reproducible test results.
+
+### 14.4 Build
+
+The Level‑3 layers are built with the `-DVECU_BUILD=ON` flag:
+
+```bash
+cmake -S . -B build/vecu -DVECU_BUILD=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build/vecu
+```
+
+When using `target-microsar` or `target-openbsw`, the layers are
+linked automatically — no separate build step needed.
 
 ---
 
@@ -1115,11 +1467,19 @@ void Appl_Shutdown(void);
 ### Required Exports from BaseLayer
 
 ```c
-/* Provided by our reference BaseLayer — do not modify */
+/* Provided by all three BaseLayer options */
 void Base_Init(const vecu_base_context_t* ctx);
 void Base_Step(uint64_t tick);
 void Base_Shutdown(void);
 ```
+
+### BaseLayer Library Names
+
+| Option | Library | Build Directory |
+|--------|---------|----------------|
+| Stub | `libbase.so` | `build/sample_ecu/` |
+| MICROSAR | `libvecu_microsar_shim.so` | `build/target-microsar/` |
+| OpenBSW | `libvecu_openbsw_shim.so` | `build/target-openbsw/` |
 
 ### Environment Variables
 
@@ -1131,10 +1491,21 @@ void Base_Shutdown(void);
 ### Useful Commands
 
 ```bash
-# Build everything
-cd vecu-core && cargo build --release
-cd baselayer/build && cmake --build .
-cd my_ecu_project/build && cmake --build .
+# Build Rust workspace
+cargo build --release
+
+# Build stub BaseLayer + sample ECU
+cmake -S examples/sample_ecu -B build/sample_ecu && cmake --build build/sample_ecu
+
+# Build MICROSAR target
+cmake -S target-microsar -B build/target-microsar \
+    -DMICROSAR_ROOT=/path/to/delivery && cmake --build build/target-microsar
+
+# Build OpenBSW target
+cmake -S target-openbsw -B build/target-openbsw && cmake --build build/target-openbsw
+
+# Build Level‑3 layers standalone
+cmake -S . -B build/vecu -DVECU_BUILD=ON && cmake --build build/vecu
 
 # Run tests
 cargo test --workspace
