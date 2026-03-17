@@ -146,6 +146,7 @@ ADRs live in `docs/adr/`.  Always check them before making structural changes.
 | [ADR-003](docs/adr/ADR-003-vhsm-integration-guarantees.md) | vHsm Integration & Guarantees | Accepted |
 | [ADR-004](docs/adr/ADR-004-os-semantics-mapping.md) | OS-Semantics Mapping & Guarantees | Accepted |
 | [ADR-005](docs/adr/ADR-005-build-toolchain-integration.md) | Build- & Toolchain-Integration (DaVinci -> vECU) | Accepted |
+| [ADR-006](docs/adr/ADR-006-validation-acceptance-criteria.md) | Validation & Acceptance Criteria | Accepted |
 
 **Key takeaway from ADR-001:** The target architecture uses a productive
 3rd-party AUTOSAR BaseLayer (Vector MICROSAR or Eclipse OpenBSW).
