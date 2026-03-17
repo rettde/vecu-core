@@ -135,6 +135,22 @@ cmake .. -DCMAKE_BUILD_TYPE=Release && cmake --build .
 
 ---
 
+## Architecture Decision Records
+
+ADRs live in `docs/adr/`.  Always check them before making structural changes.
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [ADR-001](docs/adr/ADR-001-level3-vecu-architecture.md) | Level-3 vECU Architecture with 3rd-Party AUTOSAR BaseLayer | Accepted |
+
+**Key takeaway from ADR-001:** The target architecture uses a productive
+3rd-party AUTOSAR BaseLayer (Vector MICROSAR or Eclipse OpenBSW).
+The existing stub BaseLayer in `baselayer/` is **not** the target path for
+Level-3 — it serves only as early enablement and for PoCs.
+Do **not** extend the stub BaseLayer toward production scope.
+
+---
+
 ## Do NOT
 
 - Add proprietary dependencies or closed-source code.

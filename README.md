@@ -69,6 +69,9 @@ vecu-core/
 │   ├── vecu-hsm/            ← HSM plugin (cdylib): AES-128, CMAC, SecurityAccess
 │   ├── vecu-silkit/         ← Vector SIL Kit FFI: multi-bus controllers
 │   └── vecu-loader/         ← CLI: plugin loading, ABI negotiation, simulation
+├── docs/
+│   ├── adr/                 ← Architecture Decision Records
+│   └── PROJECT_DESCRIPTION.md
 ├── examples/sample_ecu/     ← Reference ECU project (3 SWCs, RTE, CMake, config)
 ├── HOWTO_ECU_INTEGRATION.md ← Integration guide for ECU projects
 └── IMPLEMENTATION_PLAN.md   ← Phase plan (P1–P7, completed)
