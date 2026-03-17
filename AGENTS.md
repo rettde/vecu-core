@@ -142,6 +142,8 @@ ADRs live in `docs/adr/`.  Always check them before making structural changes.
 | ADR | Title | Status |
 |-----|-------|--------|
 | [ADR-001](docs/adr/ADR-001-level3-vecu-architecture.md) | Level-3 vECU Architecture with 3rd-Party AUTOSAR BaseLayer | Accepted |
+| [ADR-002](docs/adr/ADR-002-virtual-mcal-scope-guarantees.md) | Virtual-MCAL Scope & Guarantees | Accepted |
+| [ADR-003](docs/adr/ADR-003-vhsm-integration-guarantees.md) | vHsm Integration & Guarantees | Accepted |
 
 **Key takeaway from ADR-001:** The target architecture uses a productive
 3rd-party AUTOSAR BaseLayer (Vector MICROSAR or Eclipse OpenBSW).
