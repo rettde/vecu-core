@@ -106,6 +106,22 @@ static Std_ReturnType process_mac_verify(const vecu_base_context_t* ctx,
     return (rc == 0) ? E_OK : E_NOT_OK;
 }
 
+static Std_ReturnType process_hash(const vecu_base_context_t* ctx,
+                                    Crypto_JobType* job) {
+    if (ctx->hsm_hash == NULL) { return E_NOT_OK; }
+
+    Crypto_JobPrimitiveInputOutputType* io = &job->jobPrimitiveInputOutput;
+    if (io->inputPtr == NULL || io->outputPtr == NULL || io->outputLengthPtr == NULL) {
+        return E_NOT_OK;
+    }
+
+    uint32_t out_len = *io->outputLengthPtr;
+    int rc = ctx->hsm_hash(0u, io->inputPtr, io->inputLength,
+                           io->outputPtr, &out_len);
+    *io->outputLengthPtr = out_len;
+    return (rc == 0) ? E_OK : E_NOT_OK;
+}
+
 Std_ReturnType Crypto_30_vHsm_ProcessJob(uint32 objectId, Crypto_JobType* job) {
     (void)objectId;
     if (!g_initialized || job == NULL) { return E_NOT_OK; }
@@ -138,6 +154,9 @@ Std_ReturnType Crypto_30_vHsm_ProcessJob(uint32 objectId, Crypto_JobType* job) {
         } else {
             ret = process_mac_generate(ctx, job);
         }
+        break;
+    case CRYPTO_ALGOFAM_SHA2_256:
+        ret = process_hash(ctx, job);
         break;
     default:
         ret = E_NOT_OK;

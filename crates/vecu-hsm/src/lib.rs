@@ -8,6 +8,7 @@
 //! - **AES‑128 ECB/CBC** encrypt / decrypt
 //! - **AES‑128‑CMAC** generate / verify (sign / verify)
 //! - **`SecurityAccess`**: CMAC‑based seed/key challenge‑response
+//! - **SHA‑256** hash
 //! - **CSPRNG**: cryptographically secure random number generation
 //! - **Diagnostic mailbox** processing via shared memory
 //!
@@ -20,13 +21,14 @@ use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use aes::Aes128;
 use cmac::Mac;
 use rand::RngCore;
+use sha2::Digest;
 use zeroize::Zeroize;
 
 use vecu_abi::{
     status, DiagMailbox, ModuleKind, VecuPluginApi, VecuRuntimeContext, VecuShmHeader, ABI_VERSION,
     AES128_BLOCK_SIZE, AES128_CMAC_SIZE, AES128_KEY_SIZE, CAP_DIAGNOSTICS, CAP_HSM_ENCRYPT,
-    CAP_HSM_RNG, CAP_HSM_SEED_KEY, CAP_SIGN_VERIFY, HSM_BUF_SIZE, SHE_MODE_CBC, SHE_MODE_ECB,
-    SHE_NUM_KEY_SLOTS,
+    CAP_HSM_HASH, CAP_HSM_RNG, CAP_HSM_SEED_KEY, CAP_SIGN_VERIFY, HSM_BUF_SIZE, HSM_HASH_SHA256,
+    SHA256_DIGEST_SIZE, SHE_MODE_CBC, SHE_MODE_ECB, SHE_NUM_KEY_SLOTS,
 };
 
 // ---------------------------------------------------------------------------
@@ -694,6 +696,45 @@ unsafe extern "C" fn hsm_rng(out_buf: *mut u8, buf_len: u32) -> i32 {
 }
 
 // ---------------------------------------------------------------------------
+// SHA‑256 hash
+// ---------------------------------------------------------------------------
+
+/// Compute a SHA‑256 hash over `data`.
+///
+/// # Safety
+///
+/// `data` must point to `data_len` readable bytes.
+/// `out` must point to a writeable buffer of at least 32 bytes.
+/// `out_len` must point to a writeable `u32`.
+#[allow(unsafe_code, clippy::cast_possible_truncation)]
+unsafe extern "C" fn hsm_hash(
+    algorithm: u32,
+    data: *const u8,
+    data_len: u32,
+    out: *mut u8,
+    out_len: *mut u32,
+) -> i32 {
+    if !INITIALIZED.load(Ordering::Acquire) {
+        return status::INIT_FAILED;
+    }
+    if data.is_null() || out.is_null() || out_len.is_null() {
+        return status::INVALID_ARGUMENT;
+    }
+    if algorithm != HSM_HASH_SHA256 {
+        return status::INVALID_ARGUMENT;
+    }
+
+    let data_slice = unsafe { core::slice::from_raw_parts(data, data_len as usize) };
+    let digest = sha2::Sha256::digest(data_slice);
+
+    unsafe {
+        core::ptr::copy_nonoverlapping(digest.as_ptr(), out, SHA256_DIGEST_SIZE);
+        *out_len = SHA256_DIGEST_SIZE as u32;
+    }
+    status::OK
+}
+
+// ---------------------------------------------------------------------------
 // Diagnostic mailbox processing (ADR‑003 fallback path)
 // ---------------------------------------------------------------------------
 
@@ -784,8 +825,8 @@ pub unsafe extern "C" fn vecu_get_api(requested_version: u32, out_api: *mut Vecu
     let api = unsafe { &mut *out_api };
     api.abi_version = ABI_VERSION;
     api.module_kind = ModuleKind::Hsm as u32;
-    api.capabilities =
-        CAP_DIAGNOSTICS | CAP_HSM_SEED_KEY | CAP_SIGN_VERIFY | CAP_HSM_ENCRYPT | CAP_HSM_RNG;
+    api.capabilities = CAP_DIAGNOSTICS | CAP_HSM_SEED_KEY | CAP_SIGN_VERIFY
+        | CAP_HSM_ENCRYPT | CAP_HSM_RNG | CAP_HSM_HASH;
     api.reserved = 0;
     api.init = Some(hsm_init);
     api.shutdown = Some(hsm_shutdown);
@@ -802,6 +843,7 @@ pub unsafe extern "C" fn vecu_get_api(requested_version: u32, out_api: *mut Vecu
     api.verify_mac = Some(hsm_verify_mac);
     api.load_key = Some(hsm_load_key);
     api.rng = Some(hsm_rng);
+    api.hash = Some(hsm_hash);
 
     status::OK
 }
@@ -866,6 +908,7 @@ mod tests {
         assert!(api.capabilities & CAP_SIGN_VERIFY != 0);
         assert!(api.capabilities & CAP_HSM_ENCRYPT != 0);
         assert!(api.capabilities & CAP_HSM_RNG != 0);
+        assert!(api.capabilities & CAP_HSM_HASH != 0);
         assert!(api.init.is_some());
         assert!(api.shutdown.is_some());
         assert!(api.step.is_some());
@@ -881,6 +924,7 @@ mod tests {
         assert!(api.verify_mac.is_some());
         assert!(api.load_key.is_some());
         assert!(api.rng.is_some());
+        assert!(api.hash.is_some());
     }
 
     #[test]
@@ -1466,6 +1510,83 @@ mod tests {
                 out.as_mut_ptr(),
                 &mut out_len,
             )
+        };
+        assert_eq!(rc, status::INVALID_ARGUMENT);
+    }
+
+    // -- SHA‑256 hash --------------------------------------------------------
+
+    #[test]
+    fn sha256_known_answer() {
+        let _g = TEST_LOCK.lock().unwrap();
+        reset();
+        init_hsm();
+
+        let data = b"abc";
+        let mut out = [0u8; 64];
+        let mut out_len = 0u32;
+        #[allow(unsafe_code)]
+        let rc = unsafe {
+            hsm_hash(
+                HSM_HASH_SHA256,
+                data.as_ptr(),
+                data.len() as u32,
+                out.as_mut_ptr(),
+                &mut out_len,
+            )
+        };
+        assert_eq!(rc, status::OK);
+        assert_eq!(out_len as usize, SHA256_DIGEST_SIZE);
+        let expected: [u8; 32] = [
+            0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea,
+            0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
+            0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c,
+            0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad,
+        ];
+        assert_eq!(&out[..32], &expected);
+    }
+
+    #[test]
+    fn sha256_empty_input() {
+        let _g = TEST_LOCK.lock().unwrap();
+        reset();
+        init_hsm();
+
+        let mut out = [0u8; 64];
+        let mut out_len = 0u32;
+        #[allow(unsafe_code)]
+        let rc = unsafe {
+            hsm_hash(
+                HSM_HASH_SHA256,
+                [].as_ptr(),
+                0,
+                out.as_mut_ptr(),
+                &mut out_len,
+            )
+        };
+        assert_eq!(rc, status::OK);
+        assert_eq!(out_len as usize, SHA256_DIGEST_SIZE);
+        let expected: [u8; 32] = [
+            0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
+            0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+            0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+            0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
+        ];
+        assert_eq!(&out[..32], &expected);
+    }
+
+    #[test]
+    fn sha256_rejects_unknown_algorithm() {
+        let _g = TEST_LOCK.lock().unwrap();
+        reset();
+        init_hsm();
+
+        let data = b"test";
+        let mut out = [0u8; 64];
+        let mut out_len = 0u32;
+        #[allow(unsafe_code)]
+        let rc = unsafe {
+            hsm_hash(99, data.as_ptr(), data.len() as u32, out.as_mut_ptr(), &mut out_len)
         };
         assert_eq!(rc, status::INVALID_ARGUMENT);
     }

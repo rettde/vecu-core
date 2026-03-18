@@ -42,6 +42,10 @@ pub(crate) struct VecuBaseContext {
 
     // Time
     pub tick_interval_us: u64,
+
+    // Hash
+    pub hsm_hash:
+        Option<unsafe extern "C" fn(u32, *const u8, u32, *mut u8, *mut u32) -> i32>,
 }
 
 // SAFETY: VecuBaseContext is a plain C struct with no interior mutability.
@@ -126,6 +130,7 @@ impl VecuBaseContext {
             _pad0: 0,
             log_fn: Some(trampoline_log),
             tick_interval_us,
+            hsm_hash: None,
         }
     }
 }

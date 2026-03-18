@@ -84,6 +84,13 @@ pub const CAP_SIGN_VERIFY: u32 = 1 << 3;
 pub const CAP_HSM_ENCRYPT: u32 = 1 << 4;
 /// HSM supports random number generation.
 pub const CAP_HSM_RNG: u32 = 1 << 5;
+/// HSM supports cryptographic hash (SHA‑256).
+pub const CAP_HSM_HASH: u32 = 1 << 6;
+
+/// SHA‑256 algorithm identifier for `hsm_hash`.
+pub const HSM_HASH_SHA256: u32 = 0;
+/// SHA‑256 digest size in bytes.
+pub const SHA256_DIGEST_SIZE: usize = 32;
 
 // ---------------------------------------------------------------------------
 // Module kind
@@ -311,6 +318,24 @@ pub struct VecuPluginApi {
     ///
     /// `out_buf` must point to a writeable buffer of at least `buf_len` bytes.
     pub rng: Option<unsafe extern "C" fn(out_buf: *mut u8, buf_len: u32) -> i32>,
+    /// Compute a cryptographic hash (e.g. SHA‑256).
+    ///
+    /// `algorithm`: [`HSM_HASH_SHA256`] (0) for SHA‑256.
+    ///
+    /// # Safety
+    ///
+    /// `data` must point to `data_len` readable bytes.
+    /// `out` must point to a writeable buffer of at least 32 bytes (SHA‑256).
+    /// `out_len` must point to a writeable `u32`.
+    pub hash: Option<
+        unsafe extern "C" fn(
+            algorithm: u32,
+            data: *const u8,
+            data_len: u32,
+            out: *mut u8,
+            out_len: *mut u32,
+        ) -> i32,
+    >,
 }
 
 impl VecuPluginApi {
@@ -347,6 +372,7 @@ impl std::fmt::Debug for VecuPluginApi {
             .field("verify_mac", &self.verify_mac.is_some())
             .field("load_key", &self.load_key.is_some())
             .field("rng", &self.rng.is_some())
+            .field("hash", &self.hash.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -810,6 +836,7 @@ mod tests {
             CAP_SIGN_VERIFY,
             CAP_HSM_ENCRYPT,
             CAP_HSM_RNG,
+            CAP_HSM_HASH,
         ];
         for (i, a) in all.iter().enumerate() {
             for b in &all[i + 1..] {

@@ -47,6 +47,7 @@ static_assertions = "1"
 aes = "0.8"
 cbc = "0.1"
 cmac = "0.7"
+sha2 = "0.10"
 rand = "0.8"
 zeroize = { version = "1", features = ["derive"] }
 

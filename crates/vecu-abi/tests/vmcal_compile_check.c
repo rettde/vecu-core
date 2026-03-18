@@ -8,6 +8,10 @@
  */
 
 #include "Std_Types.h"
+#include "ComStack_Types.h"
+#include "Can_GeneralTypes.h"
+#include "Eth_GeneralTypes.h"
+#include "MemIf_Types.h"
 #include "vecu_frame.h"
 #include "vecu_status.h"
 #include "vecu_base_context.h"
@@ -58,10 +62,26 @@ _Static_assert(OS_MAX_ALARMS == 32u,
 
 static void smoke_test_types(void) {
     Can_PduType can_pdu;
+    can_pdu.swPduHandle = 0;
     can_pdu.id = 0x123;
     can_pdu.length = 8;
-    can_pdu.sdu = (const uint8*)0;
+    can_pdu.sdu = (uint8*)0;
     (void)can_pdu;
+
+    PduInfoType pdu_info;
+    pdu_info.SduDataPtr = (uint8*)0;
+    pdu_info.MetaDataPtr = (uint8*)0;
+    pdu_info.SduLength = 0;
+    (void)pdu_info;
+
+    Can_HwType hw;
+    hw.CanId = 0;
+    hw.Hoh = 0;
+    hw.ControllerId = 0;
+    (void)hw;
+
+    Can_ErrorStateType err = CAN_ERRORSTATE_ACTIVE;
+    (void)err;
 
     Eth_ConfigType eth_cfg;
     eth_cfg.numCtrl = 1;
@@ -98,6 +118,9 @@ static void smoke_test_types(void) {
     Crypto_30_vHsm_ConfigType hsm_cfg;
     hsm_cfg.numKeys = 20;
     (void)hsm_cfg;
+
+    Crypto_AlgorithmFamilyType sha_fam = CRYPTO_ALGOFAM_SHA2_256;
+    (void)sha_fam;
 
     Os_PhaseType phase = OS_PHASE_UNINIT;
     (void)phase;

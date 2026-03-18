@@ -2,8 +2,11 @@
  *
  * Routes CAN frames through vecu_base_context_t push_tx_frame / pop_rx_frame.
  * Implements AUTOSAR controller state machine and callback chain:
- *   Can_MainFunction_Read  → CanIf_RxIndication()
- *   Can_MainFunction_Write → CanIf_TxConfirmation()
+ *   Can_MainFunction_Read  → CanIf_RxIndication(Can_HwType*, PduInfoType*)
+ *   Can_MainFunction_Write → CanIf_TxConfirmation(PduIdType)
+ *   Can_MainFunction_Mode  → CanIf_ControllerModeIndication(deferred)
+ *
+ * Multi-controller support (up to CAN_MAX_CONTROLLERS).
  *
  * SPDX-License-Identifier: MIT OR Apache-2.0
  */
@@ -13,93 +16,108 @@
 #include "vecu_frame.h"
 #include <string.h>
 
-extern void CanIf_RxIndication(Can_HwHandleType Hrh, uint32 CanId,
-                                uint8 CanDlc, const uint8* CanSduPtr);
-extern void CanIf_TxConfirmation(Can_HwHandleType Hth);
+extern void CanIf_RxIndication(const Can_HwType* Mailbox,
+                                const PduInfoType* PduInfoPtr);
+extern void CanIf_TxConfirmation(PduIdType CanTxPduId);
 extern void CanIf_ControllerModeIndication(uint8 ControllerId,
                                             Can_ControllerStateType ControllerMode);
 
 typedef struct {
-    uint32 id;
-    uint8  dlc;
-    uint8  data[64];
-} Can_RxEntry;
-
-typedef struct {
     Can_HwHandleType hth;
+    PduIdType        swPduHandle;
 } Can_TxConfEntry;
 
-static Can_ControllerStateType g_ctrl_mode = CAN_CS_UNINIT;
+typedef struct {
+    Can_ControllerStateType current;
+    Can_ControllerStateType pending;
+    boolean                 mode_pending;
+    Can_ErrorStateType      error_state;
+} Can_CtrlState;
 
-static Can_RxEntry      g_rx_queue[CAN_RX_QUEUE_SIZE];
-static uint16           g_rx_head = 0;
-static uint16           g_rx_count = 0;
+static Can_CtrlState    g_ctrl[CAN_MAX_CONTROLLERS];
+static uint8            g_num_controllers = 0;
 
 static Can_TxConfEntry  g_tx_conf_queue[CAN_TX_QUEUE_SIZE];
 static uint16           g_tx_conf_head = 0;
 static uint16           g_tx_conf_count = 0;
 
 void Can_Init(const Can_ConfigType* Config) {
-    (void)Config;
-    g_ctrl_mode = CAN_CS_STOPPED;
-    g_rx_head = 0;
-    g_rx_count = 0;
+    uint8 n = 1;
+    if (Config != NULL && Config->numControllers > 0) {
+        n = (Config->numControllers <= CAN_MAX_CONTROLLERS) ?
+            (uint8)Config->numControllers : CAN_MAX_CONTROLLERS;
+    }
+    g_num_controllers = n;
+    uint8 i;
+    for (i = 0; i < CAN_MAX_CONTROLLERS; i++) {
+        g_ctrl[i].current      = (i < n) ? CAN_CS_STOPPED : CAN_CS_UNINIT;
+        g_ctrl[i].pending      = CAN_CS_UNINIT;
+        g_ctrl[i].mode_pending = FALSE;
+        g_ctrl[i].error_state  = CAN_ERRORSTATE_ACTIVE;
+    }
     g_tx_conf_head = 0;
     g_tx_conf_count = 0;
-    memset(g_rx_queue, 0, sizeof(g_rx_queue));
     memset(g_tx_conf_queue, 0, sizeof(g_tx_conf_queue));
 }
 
 void Can_DeInit(void) {
-    g_ctrl_mode = CAN_CS_UNINIT;
-    g_rx_count = 0;
+    uint8 i;
+    for (i = 0; i < CAN_MAX_CONTROLLERS; i++) {
+        g_ctrl[i].current = CAN_CS_UNINIT;
+        g_ctrl[i].mode_pending = FALSE;
+    }
+    g_num_controllers = 0;
     g_tx_conf_count = 0;
 }
 
 Std_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition) {
-    (void)Controller;
+    if (Controller >= g_num_controllers) { return E_NOT_OK; }
+    Can_CtrlState* cs = &g_ctrl[Controller];
+    Can_ControllerStateType target = CAN_CS_UNINIT;
+
     switch (Transition) {
         case CAN_T_START:
-            if (g_ctrl_mode == CAN_CS_STOPPED) {
-                g_ctrl_mode = CAN_CS_STARTED;
-                CanIf_ControllerModeIndication(0, CAN_CS_STARTED);
-                return E_OK;
-            }
+            if (cs->current != CAN_CS_STOPPED) { return E_NOT_OK; }
+            target = CAN_CS_STARTED;
             break;
         case CAN_T_STOP:
-            if (g_ctrl_mode == CAN_CS_STARTED || g_ctrl_mode == CAN_CS_SLEEP) {
-                g_ctrl_mode = CAN_CS_STOPPED;
-                CanIf_ControllerModeIndication(0, CAN_CS_STOPPED);
-                return E_OK;
+            if (cs->current != CAN_CS_STARTED && cs->current != CAN_CS_SLEEP) {
+                return E_NOT_OK;
             }
+            target = CAN_CS_STOPPED;
             break;
         case CAN_T_SLEEP:
-            if (g_ctrl_mode == CAN_CS_STOPPED) {
-                g_ctrl_mode = CAN_CS_SLEEP;
-                CanIf_ControllerModeIndication(0, CAN_CS_SLEEP);
-                return E_OK;
-            }
+            if (cs->current != CAN_CS_STOPPED) { return E_NOT_OK; }
+            target = CAN_CS_SLEEP;
             break;
         case CAN_T_WAKEUP:
-            if (g_ctrl_mode == CAN_CS_SLEEP) {
-                g_ctrl_mode = CAN_CS_STOPPED;
-                CanIf_ControllerModeIndication(0, CAN_CS_STOPPED);
-                return E_OK;
-            }
+            if (cs->current != CAN_CS_SLEEP) { return E_NOT_OK; }
+            target = CAN_CS_STOPPED;
             break;
         default:
-            break;
+            return E_NOT_OK;
     }
-    return E_NOT_OK;
+
+    cs->pending = target;
+    cs->mode_pending = TRUE;
+    return E_OK;
 }
 
 Can_ControllerStateType Can_GetControllerMode(uint8 Controller) {
-    (void)Controller;
-    return g_ctrl_mode;
+    if (Controller >= g_num_controllers) { return CAN_CS_UNINIT; }
+    return g_ctrl[Controller].current;
+}
+
+Std_ReturnType Can_GetControllerErrorState(uint8 Controller,
+                                            Can_ErrorStateType* ErrorStatePtr) {
+    if (Controller >= g_num_controllers || ErrorStatePtr == NULL) { return E_NOT_OK; }
+    *ErrorStatePtr = g_ctrl[Controller].error_state;
+    return E_OK;
 }
 
 Std_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo) {
-    if (g_ctrl_mode != CAN_CS_STARTED || PduInfo == NULL || PduInfo->sdu == NULL) {
+    if (PduInfo == NULL || PduInfo->sdu == NULL) { return E_NOT_OK; }
+    if (g_num_controllers == 0 || g_ctrl[0].current != CAN_CS_STARTED) {
         return E_NOT_OK;
     }
     const vecu_base_context_t* ctx = VMcal_GetCtx();
@@ -119,6 +137,7 @@ Std_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo) {
         if (g_tx_conf_count < CAN_TX_QUEUE_SIZE) {
             uint16 idx = (uint16)((g_tx_conf_head + g_tx_conf_count) % CAN_TX_QUEUE_SIZE);
             g_tx_conf_queue[idx].hth = Hth;
+            g_tx_conf_queue[idx].swPduHandle = PduInfo->swPduHandle;
             g_tx_conf_count++;
         }
         return E_OK;
@@ -127,7 +146,12 @@ Std_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo) {
 }
 
 void Can_MainFunction_Read(void) {
-    if (g_ctrl_mode != CAN_CS_STARTED) { return; }
+    uint8 i;
+    boolean any_started = FALSE;
+    for (i = 0; i < g_num_controllers; i++) {
+        if (g_ctrl[i].current == CAN_CS_STARTED) { any_started = TRUE; break; }
+    }
+    if (!any_started) { return; }
 
     const vecu_base_context_t* ctx = VMcal_GetCtx();
     if (ctx == NULL || ctx->pop_rx_frame == NULL) { return; }
@@ -140,18 +164,49 @@ void Can_MainFunction_Read(void) {
 
         if (frame.bus_type == VECU_BUS_CAN) {
             uint8 dlc = (frame.len <= 64u) ? (uint8)frame.len : 64u;
-            CanIf_RxIndication(0, frame.id, dlc, frame.data);
+            Can_HwType mailbox;
+            mailbox.CanId = frame.id;
+            mailbox.Hoh = 0;
+            mailbox.ControllerId = 0;
+
+            PduInfoType pduInfo;
+            pduInfo.SduDataPtr = frame.data;
+            pduInfo.MetaDataPtr = NULL_PTR;
+            pduInfo.SduLength = dlc;
+
+            CanIf_RxIndication(&mailbox, &pduInfo);
         }
     }
 }
 
 void Can_MainFunction_Write(void) {
-    if (g_ctrl_mode != CAN_CS_STARTED) { return; }
+    boolean any_started = FALSE;
+    uint8 i;
+    for (i = 0; i < g_num_controllers; i++) {
+        if (g_ctrl[i].current == CAN_CS_STARTED) { any_started = TRUE; break; }
+    }
+    if (!any_started) { return; }
 
     while (g_tx_conf_count > 0) {
-        Can_HwHandleType hth = g_tx_conf_queue[g_tx_conf_head].hth;
+        PduIdType swPduHandle = g_tx_conf_queue[g_tx_conf_head].swPduHandle;
         g_tx_conf_head = (uint16)((g_tx_conf_head + 1u) % CAN_TX_QUEUE_SIZE);
         g_tx_conf_count--;
-        CanIf_TxConfirmation(hth);
+        CanIf_TxConfirmation(swPduHandle);
     }
+}
+
+void Can_MainFunction_Mode(void) {
+    uint8 i;
+    for (i = 0; i < g_num_controllers; i++) {
+        Can_CtrlState* cs = &g_ctrl[i];
+        if (cs->mode_pending) {
+            cs->current = cs->pending;
+            cs->mode_pending = FALSE;
+            CanIf_ControllerModeIndication(i, cs->current);
+        }
+    }
+}
+
+void Can_MainFunction_BusOff(void) {
+    /* No bus-off in virtual environment — no-op. */
 }

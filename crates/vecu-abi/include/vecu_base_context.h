@@ -85,6 +85,15 @@ typedef struct vecu_base_context_t {
     /** Simulation tick interval in microseconds. */
     uint64_t tick_interval_us;
 
+    /* ── Hash ─────────────────────────────────────────────────────── */
+
+    /** Compute a cryptographic hash (e.g. SHA-256).
+     *  algorithm: 0=SHA-256.
+     *  Returns VECU_OK on success. */
+    int (*hsm_hash)(uint32_t algorithm,
+                    const uint8_t* data, uint32_t data_len,
+                    uint8_t* out, uint32_t* out_len);
+
 } vecu_base_context_t;
 
 /* ------------------------------------------------------------------ */

@@ -10,35 +10,14 @@
 #ifndef VMCAL_CAN_H
 #define VMCAL_CAN_H
 
-#include "Std_Types.h"
+#include "Can_GeneralTypes.h"
 
-#define CAN_RX_QUEUE_SIZE 32u
-#define CAN_TX_QUEUE_SIZE 16u
-
-typedef uint16 Can_HwHandleType;
-
-typedef enum {
-    CAN_CS_UNINIT  = 0u,
-    CAN_CS_STOPPED = 1u,
-    CAN_CS_STARTED = 2u,
-    CAN_CS_SLEEP   = 3u
-} Can_ControllerStateType;
-
-typedef enum {
-    CAN_T_START = 0u,
-    CAN_T_STOP  = 1u,
-    CAN_T_SLEEP = 2u,
-    CAN_T_WAKEUP = 3u
-} Can_StateTransitionType;
+#define CAN_MAX_CONTROLLERS 4u
+#define CAN_RX_QUEUE_SIZE   32u
+#define CAN_TX_QUEUE_SIZE   16u
 
 typedef struct {
-    uint32 id;
-    uint8  length;
-    uint8  _pad[3];
-    const uint8* sdu;
-} Can_PduType;
-
-typedef struct {
+    uint16 numControllers;
     uint16 numHth;
     uint16 numHrh;
 } Can_ConfigType;
@@ -48,7 +27,11 @@ void            Can_DeInit(void);
 Std_ReturnType  Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition);
 Can_ControllerStateType Can_GetControllerMode(uint8 Controller);
 Std_ReturnType  Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo);
+Std_ReturnType  Can_GetControllerErrorState(uint8 Controller,
+                                             Can_ErrorStateType* ErrorStatePtr);
 void            Can_MainFunction_Read(void);
 void            Can_MainFunction_Write(void);
+void            Can_MainFunction_Mode(void);
+void            Can_MainFunction_BusOff(void);
 
 #endif /* VMCAL_CAN_H */

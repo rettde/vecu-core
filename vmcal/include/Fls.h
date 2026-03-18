@@ -9,25 +9,10 @@
 #define VMCAL_FLS_H
 
 #include "Std_Types.h"
+#include "MemIf_Types.h"
 
 typedef uint32 Fls_AddressType;
 typedef uint32 Fls_LengthType;
-
-typedef enum {
-    MEMIF_UNINIT     = 0u,
-    MEMIF_IDLE       = 1u,
-    MEMIF_BUSY       = 2u,
-    MEMIF_BUSY_INTERNAL = 3u
-} MemIf_StatusType;
-
-typedef enum {
-    MEMIF_JOB_OK       = 0u,
-    MEMIF_JOB_FAILED   = 1u,
-    MEMIF_JOB_PENDING  = 2u,
-    MEMIF_JOB_CANCELED = 3u,
-    MEMIF_BLOCK_INCONSISTENT = 4u,
-    MEMIF_BLOCK_INVALID      = 5u
-} MemIf_JobResultType;
 
 typedef void (*Fls_JobEndNotificationType)(void);
 typedef void (*Fls_JobErrorNotificationType)(void);

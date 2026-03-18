@@ -22,6 +22,7 @@ extern void EthIf_TxConfirmation(uint8 CtrlIdx, Eth_BufIdxType BufIdx);
 extern void EthIf_CtrlModeIndication(uint8 CtrlIdx, Eth_ModeType CtrlMode);
 
 static Eth_ModeType g_mode = ETH_MODE_DOWN;
+static uint8   g_phys_addr[ETH_PHYS_ADDR_LEN] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x01};
 static uint8   g_tx_bufs[ETH_TX_BUF_COUNT][ETH_TX_BUF_SIZE];
 static boolean g_tx_buf_used[ETH_TX_BUF_COUNT];
 static boolean g_tx_conf_pending[ETH_TX_BUF_COUNT];
@@ -48,6 +49,13 @@ Std_ReturnType Eth_SetControllerMode(uint8 CtrlIdx, Eth_ModeType CtrlMode) {
 Eth_ModeType Eth_GetControllerMode(uint8 CtrlIdx) {
     (void)CtrlIdx;
     return g_mode;
+}
+
+void Eth_GetPhysAddr(uint8 CtrlIdx, uint8* PhysAddrPtr) {
+    (void)CtrlIdx;
+    if (PhysAddrPtr != NULL) {
+        memcpy(PhysAddrPtr, g_phys_addr, ETH_PHYS_ADDR_LEN);
+    }
 }
 
 Std_ReturnType Eth_ProvideTxBuffer(uint8 CtrlIdx, Eth_BufIdxType* BufIdxPtr,

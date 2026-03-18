@@ -79,25 +79,29 @@ static uint8  g_canif_last_rx_dlc = 0;
 static uint8  g_canif_last_rx_data[64];
 
 static int g_canif_tx_conf_count = 0;
-static Can_HwHandleType g_canif_last_tx_hth = 0;
+static PduIdType g_canif_last_tx_pdu = 0;
 
 static int g_canif_mode_ind_count = 0;
 static Can_ControllerStateType g_canif_last_mode = CAN_CS_UNINIT;
 
-void CanIf_RxIndication(Can_HwHandleType Hrh, uint32 CanId,
-                         uint8 CanDlc, const uint8* CanSduPtr) {
-    (void)Hrh;
+void CanIf_RxIndication(const Can_HwType* Mailbox,
+                         const PduInfoType* PduInfoPtr) {
     g_canif_rx_count++;
-    g_canif_last_rx_id = CanId;
-    g_canif_last_rx_dlc = CanDlc;
-    if (CanSduPtr != NULL && CanDlc > 0) {
-        memcpy(g_canif_last_rx_data, CanSduPtr, CanDlc);
+    if (Mailbox != NULL) {
+        g_canif_last_rx_id = Mailbox->CanId;
+    }
+    if (PduInfoPtr != NULL) {
+        g_canif_last_rx_dlc = (uint8)PduInfoPtr->SduLength;
+        if (PduInfoPtr->SduDataPtr != NULL && PduInfoPtr->SduLength > 0) {
+            memcpy(g_canif_last_rx_data, PduInfoPtr->SduDataPtr,
+                   PduInfoPtr->SduLength);
+        }
     }
 }
 
-void CanIf_TxConfirmation(Can_HwHandleType Hth) {
+void CanIf_TxConfirmation(PduIdType CanTxPduId) {
     g_canif_tx_conf_count++;
-    g_canif_last_tx_hth = Hth;
+    g_canif_last_tx_pdu = CanTxPduId;
 }
 
 void CanIf_ControllerModeIndication(uint8 ControllerId,
@@ -170,25 +174,31 @@ static int g_test_failures = 0;
 /* ── Test: CAN controller state machine ────────────────────────────── */
 
 static void test_can_controller_state(void) {
-    Can_ConfigType cfg = {1, 1};
+    Can_ConfigType cfg = {1, 1, 1};
     Can_Init(&cfg);
     ASSERT_EQ(Can_GetControllerMode(0), CAN_CS_STOPPED, "Can after init");
 
-    ASSERT_EQ(Can_SetControllerMode(0, CAN_T_START), E_OK, "Can start");
-    ASSERT_EQ(Can_GetControllerMode(0), CAN_CS_STARTED, "Can started");
+    ASSERT_EQ(Can_SetControllerMode(0, CAN_T_START), E_OK, "Can start request");
+    ASSERT_EQ(Can_GetControllerMode(0), CAN_CS_STOPPED, "Can still stopped before Mode");
+    Can_MainFunction_Mode();
+    ASSERT_EQ(Can_GetControllerMode(0), CAN_CS_STARTED, "Can started after Mode");
     ASSERT_EQ(g_canif_mode_ind_count, 1, "mode indication count");
     ASSERT_EQ(g_canif_last_mode, CAN_CS_STARTED, "mode indication value");
 
     ASSERT_EQ(Can_SetControllerMode(0, CAN_T_STOP), E_OK, "Can stop");
+    Can_MainFunction_Mode();
     ASSERT_EQ(Can_GetControllerMode(0), CAN_CS_STOPPED, "Can stopped");
 
     ASSERT_EQ(Can_SetControllerMode(0, CAN_T_SLEEP), E_OK, "Can sleep");
+    Can_MainFunction_Mode();
     ASSERT_EQ(Can_GetControllerMode(0), CAN_CS_SLEEP, "Can sleeping");
 
     ASSERT_EQ(Can_SetControllerMode(0, CAN_T_WAKEUP), E_OK, "Can wakeup");
+    Can_MainFunction_Mode();
     ASSERT_EQ(Can_GetControllerMode(0), CAN_CS_STOPPED, "Can woke");
 
     ASSERT_EQ(Can_SetControllerMode(0, CAN_T_SLEEP), E_OK, "sleep again");
+    Can_MainFunction_Mode();
     ASSERT_EQ(Can_SetControllerMode(0, CAN_T_START), E_NOT_OK, "start from sleep");
 
     Can_DeInit();
@@ -201,15 +211,16 @@ static void test_can_tx_confirmation(void) {
     g_tx_count = 0;
     g_canif_tx_conf_count = 0;
 
-    Can_ConfigType cfg = {1, 1};
+    Can_ConfigType cfg = {1, 1, 1};
     Can_Init(&cfg);
     Can_SetControllerMode(0, CAN_T_START);
+    Can_MainFunction_Mode();
 
     uint8_t payload[] = {0xDE, 0xAD, 0xBE, 0xEF};
     Can_PduType pdu;
+    pdu.swPduHandle = 42;
     pdu.id = 0x100;
     pdu.length = 4;
-    memset(pdu._pad, 0, sizeof(pdu._pad));
     pdu.sdu = payload;
 
     ASSERT_EQ(Can_Write(5, &pdu), E_OK, "Can_Write");
@@ -221,7 +232,7 @@ static void test_can_tx_confirmation(void) {
 
     Can_MainFunction_Write();
     ASSERT_EQ(g_canif_tx_conf_count, 1, "TxConfirmation count");
-    ASSERT_EQ(g_canif_last_tx_hth, 5, "TxConfirmation HTH");
+    ASSERT_EQ(g_canif_last_tx_pdu, 42, "TxConfirmation swPduHandle");
 
     Can_MainFunction_Write();
     ASSERT_EQ(g_canif_tx_conf_count, 1, "no extra TxConf");
@@ -236,9 +247,10 @@ static void test_can_rx_indication(void) {
     g_rx_head = 0;
     g_rx_count = 0;
 
-    Can_ConfigType cfg = {1, 1};
+    Can_ConfigType cfg = {1, 1, 1};
     Can_Init(&cfg);
     Can_SetControllerMode(0, CAN_T_START);
+    Can_MainFunction_Mode();
 
     uint8_t rx_data[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
     mock_inject_rx(0x200, VECU_BUS_CAN, rx_data, 8);
@@ -260,14 +272,14 @@ static void test_can_rx_indication(void) {
 static void test_can_write_requires_started(void) {
     g_tx_count = 0;
 
-    Can_ConfigType cfg = {1, 1};
+    Can_ConfigType cfg = {1, 1, 1};
     Can_Init(&cfg);
 
     uint8_t payload[] = {0xFF};
     Can_PduType pdu;
+    pdu.swPduHandle = 0;
     pdu.id = 0x300;
     pdu.length = 1;
-    memset(pdu._pad, 0, sizeof(pdu._pad));
     pdu.sdu = payload;
 
     ASSERT_EQ(Can_Write(0, &pdu), E_NOT_OK, "Write in STOPPED");
@@ -444,15 +456,16 @@ static void test_can_e2e_loopback(void) {
     lb_ctx.tick_interval_us = 1000;
     VMcal_Init(&lb_ctx);
 
-    Can_ConfigType cfg = {1, 1};
+    Can_ConfigType cfg = {1, 1, 1};
     Can_Init(&cfg);
     Can_SetControllerMode(0, CAN_T_START);
+    Can_MainFunction_Mode();
 
     uint8_t tx_data[] = {0xCA, 0xFE, 0xBA, 0xBE, 0xDE, 0xAD, 0xBE, 0xEF};
     Can_PduType pdu;
+    pdu.swPduHandle = 99;
     pdu.id = 0x7FF;
     pdu.length = 8;
-    memset(pdu._pad, 0, sizeof(pdu._pad));
     pdu.sdu = tx_data;
 
     ASSERT_EQ(Can_Write(3, &pdu), E_OK, "E2E: Can_Write");
@@ -466,7 +479,7 @@ static void test_can_e2e_loopback(void) {
 
     Can_MainFunction_Write();
     ASSERT_EQ(g_canif_tx_conf_count, 1, "E2E: TxConfirmation");
-    ASSERT_EQ(g_canif_last_tx_hth, 3, "E2E: TxConf HTH");
+    ASSERT_EQ(g_canif_last_tx_pdu, 99, "E2E: TxConf swPduHandle");
 
     Can_DeInit();
 }
