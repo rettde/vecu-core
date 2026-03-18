@@ -158,6 +158,7 @@ fn baselayer_bridge_lifecycle_100_ticks() {
         pad0: 0,
         tick_interval_us: 1000,
         log_fn: None,
+        hsm_api: core::ptr::null(),
     };
     #[allow(unsafe_code)]
     let rc = unsafe { (api.init.unwrap())(&ctx) };

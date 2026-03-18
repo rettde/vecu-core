@@ -402,6 +402,17 @@ pub struct VecuRuntimeContext {
     ///
     /// `msg` must be a valid NUL‑terminated C string.
     pub log_fn: Option<unsafe extern "C" fn(level: i32, msg: *const core::ffi::c_char)>,
+    /// Optional pointer to the HSM plugin's [`VecuPluginApi`].
+    ///
+    /// When non‑null the APPL plugin can read HSM function pointers
+    /// (encrypt, decrypt, MAC, seed, key, rng, hash) and inject them
+    /// into the `vecu_base_context_t` passed to `Base_Init`.
+    ///
+    /// # Safety
+    ///
+    /// Must be null or point to a valid, fully‑initialised [`VecuPluginApi`]
+    /// that outlives the simulation.
+    pub hsm_api: *const VecuPluginApi,
 }
 
 // ---------------------------------------------------------------------------

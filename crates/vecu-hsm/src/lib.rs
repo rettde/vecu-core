@@ -20,7 +20,8 @@ use std::sync::Mutex;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use aes::Aes128;
 use cmac::Mac;
-use rand::RngCore;
+use rand::rngs::StdRng;
+use rand::{RngCore, SeedableRng};
 use sha2::Digest;
 use zeroize::Zeroize;
 
@@ -116,6 +117,7 @@ static STEP_COUNT: AtomicU32 = AtomicU32::new(0);
 
 static KEY_STORE: Mutex<KeyStore> = Mutex::new(KeyStore::new());
 static LAST_SEED: Mutex<Option<[u8; SEED_LEN]>> = Mutex::new(None);
+static DET_RNG: Mutex<Option<StdRng>> = Mutex::new(None);
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -212,6 +214,18 @@ fn aes_cmac(key: &[u8; AES128_KEY_SIZE], data: &[u8]) -> [u8; AES128_CMAC_SIZE] 
     tag
 }
 
+/// Fill `buf` with random bytes from either the deterministic PRNG
+/// (if `VECU_HSM_DETERMINISTIC_SEED` was set at init) or `OsRng`.
+fn fill_random(buf: &mut [u8]) {
+    let mut det = DET_RNG.lock().expect("det rng lock");
+    if let Some(rng) = det.as_mut() {
+        rng.fill_bytes(buf);
+    } else {
+        drop(det);
+        rand::rngs::OsRng.fill_bytes(buf);
+    }
+}
+
 /// Verify AES‑128‑CMAC: returns `true` if the MAC matches.
 fn aes_cmac_verify(key: &[u8; AES128_KEY_SIZE], data: &[u8], expected: &[u8]) -> bool {
     if expected.len() != AES128_CMAC_SIZE {
@@ -252,6 +266,16 @@ unsafe extern "C" fn hsm_init(ctx: *const VecuRuntimeContext) -> i32 {
         ks.load(SECURITY_ACCESS_KEY_SLOT as u32, DEFAULT_MASTER_KEY);
     }
     *LAST_SEED.lock().expect("seed lock") = None;
+
+    // Deterministic RNG: if VECU_HSM_DETERMINISTIC_SEED is set, use a
+    // seeded PRNG instead of OsRng for reproducible simulation runs.
+    {
+        let mut det = DET_RNG.lock().expect("det rng lock");
+        *det = std::env::var("VECU_HSM_DETERMINISTIC_SEED")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(StdRng::seed_from_u64);
+    }
 
     INITIALIZED.store(true, Ordering::Release);
     status::OK
@@ -311,7 +335,7 @@ unsafe extern "C" fn hsm_seed(out_seed: *mut u8, out_len: *mut u32) -> i32 {
 
     // Generate random seed.
     let mut seed = [0u8; SEED_LEN];
-    rand::rngs::OsRng.fill_bytes(&mut seed);
+    fill_random(&mut seed);
 
     // Store for later key validation.
     *LAST_SEED.lock().expect("seed lock") = Some(seed);
@@ -691,7 +715,7 @@ unsafe extern "C" fn hsm_rng(out_buf: *mut u8, buf_len: u32) -> i32 {
     }
 
     let out_slice = unsafe { core::slice::from_raw_parts_mut(out_buf, buf_len as usize) };
-    rand::rngs::OsRng.fill_bytes(out_slice);
+    fill_random(out_slice);
     status::OK
 }
 
@@ -882,6 +906,7 @@ mod tests {
             pad0: 0,
             tick_interval_us: 1000,
             log_fn: None,
+            hsm_api: core::ptr::null(),
         }
     }
 
@@ -1393,6 +1418,7 @@ mod tests {
             pad0: 0,
             tick_interval_us: 1000,
             log_fn: None,
+            hsm_api: core::ptr::null(),
         };
 
         #[allow(unsafe_code)]
@@ -1573,6 +1599,57 @@ mod tests {
             0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
         ];
         assert_eq!(&out[..32], &expected);
+    }
+
+    #[test]
+    fn deterministic_rng_produces_reproducible_output() {
+        let _g = TEST_LOCK.lock().unwrap();
+
+        std::env::set_var("VECU_HSM_DETERMINISTIC_SEED", "42");
+
+        // Run 1: init, generate seed + rng bytes
+        reset();
+        init_hsm();
+
+        let mut seed1 = [0u8; 64];
+        let mut seed1_len = 0u32;
+        #[allow(unsafe_code)]
+        let rc = unsafe { hsm_seed(seed1.as_mut_ptr(), &mut seed1_len) };
+        assert_eq!(rc, status::OK);
+
+        let mut rng1 = [0u8; 32];
+        #[allow(unsafe_code)]
+        let rc = unsafe { hsm_rng(rng1.as_mut_ptr(), 32) };
+        assert_eq!(rc, status::OK);
+
+        // Run 2: re-init with same seed, must produce identical output
+        reset();
+        init_hsm();
+
+        let mut seed2 = [0u8; 64];
+        let mut seed2_len = 0u32;
+        #[allow(unsafe_code)]
+        let rc = unsafe { hsm_seed(seed2.as_mut_ptr(), &mut seed2_len) };
+        assert_eq!(rc, status::OK);
+
+        let mut rng2 = [0u8; 32];
+        #[allow(unsafe_code)]
+        let rc = unsafe { hsm_rng(rng2.as_mut_ptr(), 32) };
+        assert_eq!(rc, status::OK);
+
+        assert_eq!(seed1_len, seed2_len);
+        assert_eq!(
+            &seed1[..seed1_len as usize],
+            &seed2[..seed2_len as usize],
+            "Deterministic seeds must be identical across runs"
+        );
+        assert_eq!(
+            &rng1[..],
+            &rng2[..],
+            "Deterministic RNG must be identical across runs"
+        );
+
+        std::env::remove_var("VECU_HSM_DETERMINISTIC_SEED");
     }
 
     #[test]

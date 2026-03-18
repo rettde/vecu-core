@@ -305,7 +305,7 @@ pub fn run_simulation(config: &SimConfig) -> Result<(), LoaderError> {
         .transpose()?;
 
     // 2. Allocate shared memory (file-backed for NvM persistence, or anonymous).
-    let mut shm = if let Some(ref shm_path) = config.shm_file {
+    let shm = if let Some(ref shm_path) = config.shm_file {
         tracing::info!(path = %shm_path.display(), "using file-backed SHM for NvM persistence");
         SharedMemory::from_file(shm_path, config.shm_layout())
             .map_err(|e| LoaderError::Config(format!("SHM file error: {e}")))?        
@@ -314,22 +314,23 @@ pub fn run_simulation(config: &SimConfig) -> Result<(), LoaderError> {
     };
     shm.validate().map_err(LoaderError::Abi)?;
 
-    // 3. Build runtime context.
-    let (shm_base, shm_size) = shm.raw_parts();
+    // 3. Build runtime and assign slots.
+    let mut runtime = Runtime::new(shm);
+    runtime.set_appl(PluginSlot::new(appl_plugin.into_api()));
+    if let Some(hsm) = hsm_plugin {
+        runtime.set_hsm(PluginSlot::new(hsm.into_api()));
+    }
+
+    // 4. Build runtime context (hsm_api points into the runtime's PluginSlot).
+    let (shm_base, shm_size) = runtime.shm_mut().raw_parts();
     let ctx = VecuRuntimeContext {
         shm_base,
         shm_size,
         pad0: 0,
         tick_interval_us: config.tick_interval_us,
         log_fn: None,
+        hsm_api: runtime.hsm_api_ptr(),
     };
-
-    // 4. Build runtime and assign slots.
-    let mut runtime = Runtime::new(shm);
-    runtime.set_appl(PluginSlot::new(appl_plugin.into_api()));
-    if let Some(hsm) = hsm_plugin {
-        runtime.set_hsm(PluginSlot::new(hsm.into_api()));
-    }
 
     // 5. Initialise modules.
     runtime.init_all(&ctx)?;

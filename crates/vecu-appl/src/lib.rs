@@ -111,6 +111,7 @@ fn try_activate_bridge(ctx: &VecuRuntimeContext) -> bool {
         shm_vars,
         shm_vars_size,
         ctx.tick_interval_us,
+        ctx.hsm_api,
     ));
 
     // Call Base_Init and Appl_Init
@@ -310,6 +311,7 @@ mod tests {
             pad0: 0,
             tick_interval_us: 1000,
             log_fn: None,
+            hsm_api: core::ptr::null(),
         }
     }
 

@@ -111,6 +111,7 @@ fn bridge_mode_loads_and_calls_c_libraries() {
         pad0: 0,
         tick_interval_us: 1000,
         log_fn: None,
+        hsm_api: core::ptr::null(),
     };
     #[allow(unsafe_code)]
     let rc = unsafe { (api.init.unwrap())(&ctx) };
@@ -150,6 +151,7 @@ fn echo_mode_still_works_without_env_vars() {
         pad0: 0,
         tick_interval_us: 1000,
         log_fn: None,
+        hsm_api: core::ptr::null(),
     };
 
     #[allow(unsafe_code)]

@@ -17,6 +17,8 @@ thiserror = { workspace = true }
 [dev-dependencies]
 proptest = { workspace = true }
 cc = { workspace = true }
+vecu-hsm = { path = "../vecu-hsm" }
+libloading = { workspace = true }
 
 [lints]
 workspace = true

@@ -1000,6 +1000,7 @@ dependencies = [
  "proptest",
  "thiserror",
  "vecu-abi",
+ "vecu-hsm",
 ]
 
 [[package]]

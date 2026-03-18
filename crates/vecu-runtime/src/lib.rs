@@ -387,6 +387,17 @@ impl Runtime {
         self.tick
     }
 
+    /// Pointer to the HSM plugin's [`VecuPluginApi`], or null if no HSM is set.
+    ///
+    /// Used by the loader to populate [`VecuRuntimeContext::hsm_api`] so
+    /// that the APPL plugin can wire HSM callbacks into the `BaseLayer`.
+    #[must_use]
+    pub fn hsm_api_ptr(&self) -> *const vecu_abi::VecuPluginApi {
+        self.hsm
+            .as_ref()
+            .map_or(core::ptr::null(), |s| s.api() as *const _)
+    }
+
     /// Borrow the shared memory (read‑only).
     #[must_use]
     pub fn shm(&self) -> &SharedMemory {
@@ -471,6 +482,7 @@ mod tests {
             pad0: 0,
             tick_interval_us: 1000,
             log_fn: None,
+            hsm_api: core::ptr::null(),
         }
     }
 

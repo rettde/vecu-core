@@ -111,26 +111,53 @@ unsafe extern "C" fn trampoline_log(level: u32, msg: *const core::ffi::c_char) {
 impl VecuBaseContext {
     /// Build a new context from the current module state.
     ///
-    /// The returned context is valid as long as the module is initialized.
-    pub(crate) fn build(shm_vars: *mut u8, shm_vars_size: u32, tick_interval_us: u64) -> Self {
+    /// When `hsm_api` is non-null, the HSM plugin's crypto function pointers
+    /// are wired into the context so that the `BaseLayer`'s `Cry` → `CryIf` → `Csm`
+    /// chain can delegate to the vecu-hsm plugin.
+    ///
+    /// # Safety
+    ///
+    /// `hsm_api` must be null or point to a valid, fully-initialised
+    /// [`VecuPluginApi`](vecu_abi::VecuPluginApi).
+    #[allow(unsafe_code)]
+    pub(crate) fn build(
+        shm_vars: *mut u8,
+        shm_vars_size: u32,
+        tick_interval_us: u64,
+        hsm_api: *const vecu_abi::VecuPluginApi,
+    ) -> Self {
+        let (enc, dec, gen_mac, ver_mac, seed, key, rng, hash) = if hsm_api.is_null() {
+            (None, None, None, None, None, None, None, None)
+        } else {
+            let api = unsafe { &*hsm_api };
+            (
+                api.encrypt,
+                api.decrypt,
+                api.generate_mac,
+                api.verify_mac,
+                api.seed,
+                api.key,
+                api.rng,
+                api.hash,
+            )
+        };
+
         Self {
             push_tx_frame: Some(trampoline_push_tx),
             pop_rx_frame: Some(trampoline_pop_rx),
-            // HSM callbacks are not wired yet (P5: Crypto Integration).
-            // For now they are None — BaseLayer must handle gracefully.
-            hsm_encrypt: None,
-            hsm_decrypt: None,
-            hsm_generate_mac: None,
-            hsm_verify_mac: None,
-            hsm_seed: None,
-            hsm_key: None,
-            hsm_rng: None,
+            hsm_encrypt: enc,
+            hsm_decrypt: dec,
+            hsm_generate_mac: gen_mac,
+            hsm_verify_mac: ver_mac,
+            hsm_seed: seed,
+            hsm_key: key,
+            hsm_rng: rng,
             shm_vars,
             shm_vars_size,
             _pad0: 0,
             log_fn: Some(trampoline_log),
             tick_interval_us,
-            hsm_hash: None,
+            hsm_hash: hash,
         }
     }
 }
