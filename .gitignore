@@ -21,3 +21,9 @@
 
 # Shared memory files
 *.shm
+
+# CMake build artifacts
+**/build/
+
+# Generated tool output
+tools/output/

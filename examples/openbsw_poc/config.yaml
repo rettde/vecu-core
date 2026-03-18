@@ -1,0 +1,15 @@
+# OpenBSW PoC — vECU simulation configuration
+#
+# Point base_lib at the built openbsw_base shared library.
+# When no application is needed, appl_lib can be omitted.
+
+tick_count: 100
+tick_interval_us: 1000
+
+base_lib: "examples/openbsw_poc/build/libopenbsw_base.dylib"
+# appl_lib: "examples/sample_ecu/build/libappl_ecu.dylib"
+
+# Uncomment for SIL Kit co-simulation:
+# silkit:
+#   registry_uri: "silkit://localhost:8500"
+#   participant_name: "vECU_OpenBSW"
