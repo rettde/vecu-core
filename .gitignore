@@ -27,3 +27,6 @@
 
 # Generated tool output
 tools/output/
+
+# Cloned external dependencies
+examples/openbsw_poc/openbsw_src/
