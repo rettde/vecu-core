@@ -64,32 +64,25 @@ endif()
 if(OPENBSW_ROOT AND EXISTS "${OPENBSW_ROOT}")
     message(STATUS "OpenBSW integration: using real sources from ${OPENBSW_ROOT}")
 
-    # OpenBSW BSW library sources (C++).
-    # Collect all .cpp and .c from the BSW modules that map to our needs:
-    #   lifecycle  → EcuM equivalent
-    #   cpp2can    → CAN abstraction (CanIf equivalent)
-    #   docan      → CAN transport (CanTp equivalent)
-    #   transport  → Transport layer
-    #   uds        → Diagnostics (Dcm equivalent)
-    #   doip       → DoIP
-    #   runtime    → Runtime / scheduler
-    #   storage    → NvM equivalent
-    set(OPENBSW_BSW_MODULES
-        lifecycle cpp2can docan transport uds doip runtime storage
-        async asyncImpl common estd util io middleware platform logger timer
+    # Targeted OpenBSW source files — only the specific .cpp files needed
+    # by VecuCanTransceiver and the bridge.  Compiling ALL modules would
+    # pull in the entire FreeRTOS / BSP / UDS framework; instead we build
+    # only the cpp2can CAN abstraction layer that our transceiver extends.
+    set(OPENBSW_BSW_SOURCES
+        "${OPENBSW_ROOT}/libs/bsw/cpp2can/src/can/transceiver/AbstractCANTransceiver.cpp"
+        "${OPENBSW_ROOT}/libs/bsw/cpp2can/src/can/canframes/CANFrame.cpp"
+        "${OPENBSW_ROOT}/libs/bsw/cpp2can/src/can/filter/BitFieldFilter.cpp"
+        "${OPENBSW_ROOT}/libs/bsw/cpp2can/src/can/filter/IntervalFilter.cpp"
+        "${OPENBSW_ROOT}/libs/bsw/cpp2can/src/can/filter/AbstractStaticBitFieldFilter.cpp"
     )
-    set(OPENBSW_BSW_SOURCES "")
-    foreach(mod ${OPENBSW_BSW_MODULES})
-        file(GLOB_RECURSE _mod_src
-            "${OPENBSW_ROOT}/libs/bsw/${mod}/src/*.cpp"
-            "${OPENBSW_ROOT}/libs/bsw/${mod}/src/*.c"
-        )
-        list(APPEND OPENBSW_BSW_SOURCES ${_mod_src})
-    endforeach()
 
-    # OpenBSW include paths — each BSW module has include/ under its dir.
+    # Include paths — keep broad for header resolution even though we only
+    # compile a subset of sources.  Each BSW module has include/ under its dir.
+    set(OPENBSW_INCLUDE_MODULES
+        cpp2can async asyncImpl common estd util platform timer
+    )
     set(OPENBSW_BSW_INCLUDE_DIRS "")
-    foreach(mod ${OPENBSW_BSW_MODULES})
+    foreach(mod ${OPENBSW_INCLUDE_MODULES})
         if(EXISTS "${OPENBSW_ROOT}/libs/bsw/${mod}/include")
             list(APPEND OPENBSW_BSW_INCLUDE_DIRS
                 "${OPENBSW_ROOT}/libs/bsw/${mod}/include")
@@ -125,12 +118,24 @@ if(OPENBSW_ROOT AND EXISTS "${OPENBSW_ROOT}")
         endif()
     endforeach()
 
+    # vecu platform override path — MUST come first so our single-threaded
+    # stubs (Lock.h, ModifiableLock.h, Types.h, suspendResumeAllInterrupts.h)
+    # take precedence over FreeRTOS-specific headers.
+    set(VECU_PLATFORM_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/include/vecu_platform")
+
+    # asyncFreeRtos include dir as fallback for headers we DON'T override
+    # (e.g. FreeRtosAdapter.h, TaskContext.h — only used if something pulls them).
+    if(EXISTS "${OPENBSW_ROOT}/libs/bsw/asyncFreeRtos/include")
+        list(APPEND OPENBSW_BSW_INCLUDE_DIRS
+            "${OPENBSW_ROOT}/libs/bsw/asyncFreeRtos/include")
+    endif()
+
     set(BSW_SOURCES
         src/openbsw_bridge.cpp
         src/VecuCanTransceiver.cpp
         ${OPENBSW_BSW_SOURCES}
     )
-    set(BSW_INCLUDE_DIRS ${OPENBSW_BSW_INCLUDE_DIRS})
+    set(BSW_INCLUDE_DIRS ${VECU_PLATFORM_INCLUDE} ${OPENBSW_BSW_INCLUDE_DIRS})
 
 else()
     message(STATUS "OpenBSW integration: using built-in stubs (set OPENBSW_ROOT for real sources)")

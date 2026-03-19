@@ -14,18 +14,15 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  */
 
+extern "C" {
 #include "vecu_base_context.h"
 #include "VMcal_Context.h"
-#include "vecu/VecuCanTransceiver.h"
-
 #ifdef VECU_BUILD
-extern "C" {
 #include "Os_Mapping.h"
-}
 #endif
+}
 
-#include <lifecycle/LifecycleManager.h>
-#include <async/AsyncBinding.h>
+#include "vecu/VecuCanTransceiver.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -43,44 +40,10 @@ extern "C" {
 namespace
 {
 
-constexpr size_t MaxNumComponents         = 16;
-constexpr size_t MaxNumLevels             = 9;
-constexpr size_t MaxNumComponentsPerLevel = MaxNumComponents;
-
-using LifecycleManagerType = ::lifecycle::declare::
-    LifecycleManager<MaxNumComponents, MaxNumLevels, MaxNumComponentsPerLevel>;
-
-// Forward declarations for OpenBSW platform hooks.
-// These are provided by the application or platform-specific code.
-// When building a specific vECU, they would register the actual
-// LifecycleComponents from the series ECU project.
-void vecuPlatformLifecycleAdd(
-    ::lifecycle::LifecycleManager& manager, uint8_t level);
-
-// Static instances
 static bool                           g_bridge_initialized = false;
 static vecu::VecuCanTransceiver*      g_can_transceiver    = nullptr;
 
-uint32_t getTimestampMs()
-{
-    // In a real integration this would read the OS tick counter.
-    // For now, return 0 — the lifecycle manager uses this only for logging.
-    return 0U;
-}
-
 } // anonymous namespace
-
-// ---------------------------------------------------------------------------
-// Weak default: no-op platform lifecycle registration.
-// A real vECU project overrides this to add its LifecycleComponents.
-// ---------------------------------------------------------------------------
-
-#ifndef _WIN32
-__attribute__((weak))
-#endif
-void vecuPlatformLifecycleAdd(
-    ::lifecycle::LifecycleManager& /* manager */, uint8_t /* level */)
-{}
 
 // ---------------------------------------------------------------------------
 // Base_* entry points (vecu ABI)

@@ -7,7 +7,10 @@
  */
 
 #include "vecu/VecuCanTransceiver.h"
+
+extern "C" {
 #include "VMcal_Context.h"
+}
 
 #include <cstring>
 
