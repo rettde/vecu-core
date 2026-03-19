@@ -122,8 +122,17 @@ examples/openbsw_poc/
 ├── config.yaml                   # vecu-loader configuration
 ├── include/
 │   ├── openbsw_shim.h           # C lifecycle bridge header (stubs path)
-│   └── vecu/
-│       └── VecuCanTransceiver.h  # Virtual CAN transceiver for OpenBSW
+│   ├── vecu/
+│   │   └── VecuCanTransceiver.h  # Virtual CAN transceiver for OpenBSW
+│   └── vecu_platform/            # Single-threaded platform stubs
+│       ├── async/
+│       │   ├── Lock.h            # No-op lock (replaces FreeRTOS interrupt lock)
+│       │   ├── ModifiableLock.h  # No-op modifiable lock
+│       │   └── Types.h           # Cooperative async types (no FreeRTOS)
+│       ├── bsp/timer/
+│       │   └── SystemTimer.h     # Tick-based deterministic timer
+│       └── interrupts/
+│           └── suspendResumeAllInterrupts.h  # No-op (single-threaded)
 └── src/
     ├── openbsw_shim.c            # C lifecycle bridge (stubs path)
     ├── openbsw_stubs.c           # Placeholder stubs for CI
@@ -166,8 +175,12 @@ cmake -B build -S . \
 When `OPENBSW_ROOT` is set, the CMake build:
 - Enables C++ (C++14) alongside C11
 - Compiles `openbsw_bridge.cpp` + `VecuCanTransceiver.cpp` instead of stubs
-- Collects all `.cpp`/`.c` from selected OpenBSW BSW modules
-- Sets up include paths for ETL, FreeRTOS POSIX, and platform BSP
+- Compiles only the targeted OpenBSW cpp2can sources (5 files):
+  `AbstractCANTransceiver.cpp`, `CANFrame.cpp`, `BitFieldFilter.cpp`,
+  `IntervalFilter.cpp`, `AbstractStaticBitFieldFilter.cpp`
+- Puts `vecu_platform/` first in include path so single-threaded stubs
+  override FreeRTOS-specific headers (`Lock.h`, `Types.h`, `SystemTimer.h`)
+- Sets up include paths for ETL, platform BSP, and OpenBSW BSW modules
 
 #### Step 3: Build
 
@@ -176,12 +189,13 @@ cmake --build build
 ```
 
 This produces `libopenbsw_base.{so,dylib,dll}` containing:
-- OpenBSW BSW modules (C++)
+- OpenBSW cpp2can layer (real C++ CAN abstraction)
 - `VecuCanTransceiver` (virtual CAN)
 - Virtual-MCAL (C)
 - vHsm Adapter (C)
 - OS-Mapping (C)
 - Lifecycle bridge (`openbsw_bridge.cpp`)
+- vecu_platform stubs (single-threaded async, timer, interrupts)
 
 #### Step 4: Run with vecu-loader
 
@@ -217,49 +231,66 @@ Extends OpenBSW's `AbstractCANTransceiver`:
 | `poll(maxRx)` | Call `ctx->pop_rx_frame()`, convert to `CANFrame`, call `notifyListeners()` |
 | `mute()` / `unmute()` | Suppress TX |
 
+## vecu_platform: Single-Threaded Platform Stubs
+
+OpenBSW's cpp2can layer depends on FreeRTOS threading primitives.
+The `include/vecu_platform/` directory provides single-threaded replacements:
+
+| Header | Replaces | Implementation |
+|--------|----------|----------------|
+| `async/Lock.h` | FreeRTOS interrupt-suspension lock | No-op (single-threaded) |
+| `async/ModifiableLock.h` | FreeRTOS modifiable lock | No-op (single-threaded) |
+| `async/Types.h` | FreeRTOS-specific async types | Cooperative types, `TimeoutType` calls `IRunnable::execute()` |
+| `bsp/timer/SystemTimer.h` | Platform BSP hardware timer | Tick-based deterministic timer |
+| `interrupts/suspendResumeAllInterrupts.h` | FreeRTOS interrupt suspension | No-op (single-threaded) |
+
+These stubs are placed **first** in the include path, so they override
+the FreeRTOS-specific headers from `asyncFreeRtos/` without modifying
+any OpenBSW source code.
+
 ## Remaining Work for Full Integration
 
 ### Must-Have
 
-1. **FreeRTOS POSIX adapter**: OpenBSW's `async` framework requires the
-   FreeRTOS POSIX port.  Either link against it, or provide a minimal
-   single-threaded stub that dispatches from `Os_Tick()`.
-
-2. **ETL configuration**: OpenBSW uses the Embedded Template Library.
+1. **ETL configuration**: OpenBSW uses the Embedded Template Library.
    An `etl_profile.h` must be provided (see `executables/referenceApp/etl_profile/`).
 
-3. **Platform BSP stubs**: OpenBSW expects `StaticBsp`, `Uart`, `bspMcu`
-   implementations.  Provide minimal stubs or bridge to `vecu_base_context_t.log_fn`.
-
-4. **Application registration**: Override `vecuPlatformLifecycleAdd()` to
+2. **Application registration**: Override `vecuPlatformLifecycleAdd()` to
    register the actual ECU application `ILifecycleComponent`s.
+
+3. **Expand compiled modules**: Currently only cpp2can is compiled.
+   Adding more modules (lifecycle, docan, transport, uds) requires
+   additional vecu_platform stubs for each module's dependencies.
 
 ### Nice-to-Have
 
-5. **VecuEthTransceiver**: Virtual Ethernet transceiver extending
+4. **VecuEthTransceiver**: Virtual Ethernet transceiver extending
    OpenBSW's Ethernet driver interface (similar pattern to CAN).
 
-6. **VecuStorageBackend**: Bridge OpenBSW's `storage` module to
+5. **VecuStorageBackend**: Bridge OpenBSW's `storage` module to
    `vecu_base_context_t.shm_vars` for persistent NvM data.
 
-7. **Logger bridge**: Route OpenBSW's `logger` output through
+6. **Logger bridge**: Route OpenBSW's `logger` output through
    `vecu_base_context_t.log_fn` for unified tracing.
 
-8. **Deterministic async adapter**: Replace FreeRTOS threading with a
-   single-threaded cooperative scheduler driven by `Os_Tick()` for
-   fully deterministic simulation.
+7. **Full async adapter**: Extend the cooperative async stubs to support
+   `async::execute()` and `async::schedule()` for modules that need
+   deferred execution.
 
 ## What This PoC Validates
 
-1. **Build path**: OpenBSW BSW code compiles against Virtual-MCAL headers
+1. **Real C++ compilation**: OpenBSW's cpp2can layer (5 source files)
+   compiles against Virtual-MCAL headers with vecu_platform stubs
 2. **ABI boundary**: `vecu_base_context_t` is the sole interface between
    Rust runtime and C/C++ BaseLayer
-3. **Link-time substitution**: CAN transceiver, HSM, and OS are swapped
-   without modifying any BSW source code
+3. **Link-time substitution**: CAN transceiver, HSM, OS, and async
+   framework are swapped without modifying any OpenBSW source code
 4. **CAN routing**: `VecuCanTransceiver` provides a concrete implementation
    of OpenBSW's `AbstractCANTransceiver` backed by vecu-core's frame I/O
 5. **Lifecycle compatibility**: `Base_Init` / `Base_Step` / `Base_Shutdown`
    map cleanly to OpenBSW's `LifecycleManager`
+6. **Platform independence**: Single-threaded vecu_platform stubs eliminate
+   FreeRTOS dependency for deterministic simulation
 
 ## License
 
