@@ -78,4 +78,13 @@ EXPORT void Base_Shutdown(void) {
     g_ctx = NULL;
 }
 
+EXPORT void Appl_Init(void) {
+}
+
+EXPORT void Appl_MainFunction(void) {
+}
+
+EXPORT void Appl_Shutdown(void) {
+}
+
 #endif /* VECU_BUILD */

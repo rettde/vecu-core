@@ -275,6 +275,7 @@ add_library(zc_d_c0_vecu SHARED
     ${BSW_SOURCES}
     ${GENDATA_SOURCES}
     ${APPL_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/vecu_appl_stubs.c
 )
 
 target_include_directories(zc_d_c0_vecu PRIVATE ${VECU_INCLUDE_DIRS})
@@ -305,7 +306,6 @@ endif()
 if(APPLE)
     set_target_properties(zc_d_c0_vecu PROPERTIES
         SUFFIX ".dylib"
-        LINK_FLAGS "-undefined dynamic_lookup"
     )
 elseif(UNIX)
     set_target_properties(zc_d_c0_vecu PROPERTIES
