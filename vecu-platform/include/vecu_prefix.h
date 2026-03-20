@@ -14,9 +14,14 @@
 
 #define VECU_BUILD 1
 
+/* Prevent MICROSAR Det from entering an endless loop on error.
+ * In vECU context we log errors and continue execution. */
+#define DET_REGRESSION_TEST
+
 #include "Platform_Types.h"
 #include "Compiler.h"
 #include "Std_Types.h"
+#include "ComStack_Types.h"
 #include "CanTrcv_GeneralTypes.h"
 
 /* Target intrinsics that don't exist on host */

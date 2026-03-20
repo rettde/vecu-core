@@ -17,11 +17,17 @@
 typedef uint16 PduIdType;
 typedef uint32 PduLengthType;
 
+typedef uint8* SduDataPtrType;
+typedef uint8* MetaDataPtrType;
+
 typedef struct {
-    uint8*        SduDataPtr;
-    uint8*        MetaDataPtr;
+    SduDataPtrType SduDataPtr;
+    MetaDataPtrType MetaDataPtr;
     PduLengthType SduLength;
 } PduInfoType;
+
+#define PDUINFOTYPE_INIT  {NULL_PTR, NULL_PTR, 0}
+#define PDUINFOTYPE_VERSION 43
 
 typedef enum {
     TP_DATACONF    = 0x00u,
@@ -34,7 +40,10 @@ typedef struct {
     PduLengthType   TxTpDataCnt;
 } RetryInfoType;
 
-typedef uint8 NetworkHandleType;
+typedef uint8  NotifResultType;
+typedef uint8  BusTrcvErrorType;
+typedef uint8  NetworkHandleType;
+typedef uint16 PNCHandleType;
 
 typedef enum {
     BUFREQ_OK       = 0x00u,
@@ -48,6 +57,32 @@ typedef enum {
     TP_BS     = 0x01u,
     TP_BC     = 0x02u
 } TPParameterType;
+
+typedef struct {
+    uint32 nanoseconds;
+    uint32 seconds;
+    uint16 secondsHi;
+} TimeStampType;
+
+#define TIME_STAMP_TYPE
+
+typedef enum {
+    VALID     = 0x00u,
+    INVALID   = 0x01u,
+    UNCERTAIN = 0x02u
+} TimeStampQualType;
+
+typedef struct {
+    TimeStampType     timestampClockValue;
+    TimeStampType     disciplinedClockValue;
+    TimeStampQualType timeQuality;
+} TimeTupleType;
+
+typedef struct ListElemStructType {
+    uint16                       DataLength;
+    uint8*                       DataPtr;
+    struct ListElemStructType*   NextListElemPtr;
+} ListElemStructType;
 
 typedef uint8 IcomConfigIdType;
 

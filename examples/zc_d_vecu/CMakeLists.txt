@@ -235,8 +235,8 @@ set(GENDATA_EXCLUDE_PATTERNS
     # MCAL driver GenData (vmcal replaces)
     "Can_Lcfg"  "Can_PBcfg"  "Lin_LCfg"  "Lin_PBcfg"
     # Crypto GenData (vhsm_adapter replaces full BSW Crypto_30_vHsm)
-    "CryIf_Cfg"  "Crypto_30_vHsm"  "CanIf_Lcfg"
-    # NvM_Cfg (compile-time block length checks reference app variables)
+    "CryIf_Cfg"  "Crypto_30_vHsm"
+    # NvM_Cfg (compile-time block length checks fail with stub RAM block sizes)
     "NvM_Cfg"
     # RteAnalyzer stubs (duplicate real BSW symbols)
     "RteAnalyzer"
@@ -263,6 +263,8 @@ message(STATUS "  BSW .c files:     ${_bsw_count}")
 set(APPL_SOURCES
     # vECU plugin bridge (Base_Init/Step/Shutdown → MICROSAR lifecycle)
     ${CMAKE_CURRENT_SOURCE_DIR}/vecu_microsar_bridge.c
+    # Det error/runtime/transient callout hooks → vecu log_fn
+    ${CMAKE_CURRENT_SOURCE_DIR}/vecu_det_logging.c
 )
 
 # ===========================================================================

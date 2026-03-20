@@ -15,15 +15,6 @@
 
 /* --- Data symbols (zero-initialized) --- */
 
-uint8_t CanIf_CanIfCtrlId2MappedTxBuffersConfig[256];
-uint8_t CanIf_MailBoxConfig[256];
-uint8_t CanIf_MappedTxBuffersConfig[256];
-uint8_t CanIf_RxPduConfig[256];
-uint8_t CanIf_TxBufferPrioByCanIdBase[256];
-uint8_t CanIf_TxBufferPrioByCanIdConfig[256];
-uint8_t CanIf_TxPduConfig[256];
-uint8_t CanIf_WakeUpConfig[256];
-uint8_t CanIf_WakeUpValidationFctPtr[256];
 uint8_t CanTSyn_PCPartitionConfig[256];
 uint8_t DoIP_PCConfig[256];
 uint8_t EthIf_PCConfig[256];
@@ -83,24 +74,13 @@ void BswM_INIT_NvMReadAll(void) { }
 void BswM_Is_Udp_Nm_State_BusSleep_PrepBusSleep(void) { }
 void CDD_ResetReason_Init(void) { }
 void CDD_SpiFlash_MainFunction(void) { }
-void CanIf_BusOffNotificationFctPtr(void) { }
 void CanIf_ControllerModeIndication(void) { }
-void CanIf_CtrlModeIndicationFctPtr(void) { }
-void CanIf_CtrlStates(void) { }
 void CanIf_RxIndication(void) { }
-void CanIf_RxIndicationFctList(void) { }
-void CanIf_TrcvModeIndicationFctPtr(void) { }
-void CanIf_TrcvToCtrlMap(void) { }
-void CanIf_TxConfirmationFctList(void) { }
-void CanIf_TxPduQueueIndex(void) { }
-void CanIf_TxQueue(void) { }
-void CanIf_TxQueueData(void) { }
-void CanIf_TxQueueFlags(void) { }
-void CanIf_TxQueueIndex2DataStartStop(void) { }
 void CanSM_GetCurrentComMode(void) { }
 void CanSM_Init(void) { }
 void CanSM_MainFunction(void) { }
 void CanSM_RequestComMode(void) { }
+void CanSM_TransceiverModeIndication(void) { }
 void CanTSyn_ControllerPduPartitionMapping(void) { }
 void CanTSyn_MainFunction_OS_Application_Core2_QM(void) { }
 void CanTSyn_MasterPduPartitionMapping(void) { }
@@ -120,9 +100,7 @@ void Can_30_Core_MainFunction_Wakeup(void) { }
 void Can_30_Core_MainFunction_Write(void) { }
 void Can_CheckWakeup(void) { }
 void Can_SetBaudrate(void) { }
-void CddDetLogging_CalloutErrorHook(void) { }
-void CddDetLogging_CalloutRuntimeError(void) { }
-void CddDetLogging_CalloutTransientFault(void) { }
+/* CddDetLogging — real implementations forwarding to vecu log_fn */
 void CddDowngradeProtection_Main(void) { }
 void CddEthWul_MainFunction(void) { }
 void CddEthWul_TriggerWul(void) { }
@@ -838,6 +816,10 @@ void vRpcProxy_StartOfReception(void) { }
 void vRpcProxy_TpRxIndication(void) { }
 void vRpcProxy_TpTxConfirmation(void) { }
 void veGwM_CanNm_CanIf_Transmit(void) { }
+void veGwM_CanNm_RxIndication(void) { }
+void veGwM_CanNm_TxConfirmation(void) { }
+void veGwM_CanSM_ControllerBusOff(void) { }
+void veGwM_CanSM_ControllerModeIndication(void) { }
 void veGwM_MainFunction_App_OS_Application_Core0_QM(void) { }
 void veGwM_MainFunction_GW_Core1_Cyclic(void) { }
 void veGwM_MainFunction_GW_Core1_Polling(void) { }

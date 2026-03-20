@@ -290,6 +290,31 @@ impl LoadedPlugin {
 // Orchestrator
 // ---------------------------------------------------------------------------
 
+/// Log callback passed to plugins via [`VecuRuntimeContext`].
+///
+/// Maps C-side numeric levels (0 = trace … 4 = error) to `tracing` macros.
+///
+/// # Safety
+///
+/// `msg` must be a valid NUL-terminated C string.
+#[allow(unsafe_code)]
+unsafe extern "C" fn loader_log_trampoline(level: i32, msg: *const core::ffi::c_char) {
+    let s = if msg.is_null() {
+        "<null>"
+    } else {
+        unsafe { core::ffi::CStr::from_ptr(msg) }
+            .to_str()
+            .unwrap_or("<invalid utf8>")
+    };
+    match level {
+        0 => tracing::trace!(target: "vecu_c", "{s}"),
+        1 => tracing::debug!(target: "vecu_c", "{s}"),
+        2 => tracing::info!(target: "vecu_c", "{s}"),
+        3 => tracing::warn!(target: "vecu_c", "{s}"),
+        _ => tracing::error!(target: "vecu_c", "{s}"),
+    }
+}
+
 /// Run a full simulation according to `config`.
 ///
 /// # Errors
@@ -328,7 +353,7 @@ pub fn run_simulation(config: &SimConfig) -> Result<(), LoaderError> {
         shm_size,
         pad0: 0,
         tick_interval_us: config.tick_interval_us,
-        log_fn: None,
+        log_fn: Some(loader_log_trampoline),
         hsm_api: runtime.hsm_api_ptr(),
     };
 

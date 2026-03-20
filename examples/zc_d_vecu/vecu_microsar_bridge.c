@@ -18,6 +18,7 @@
 
 /* Forward declarations for MICROSAR BSW entry points.
  * These are provided by the real MICROSAR EcuM, SchM, and BswM sources. */
+extern void Det_Init(void* ConfigPtr);
 extern void EcuM_Init(void);
 extern void EcuM_MainFunction(void);
 extern void SchM_Init(void);
@@ -47,9 +48,16 @@ void (*Base_GetLogFn(void))(uint32_t level, const char* msg) {
 EXPORT void Base_Init(const vecu_base_context_t* ctx) {
     g_ctx = ctx;
 
+    if (ctx->log_fn != NULL) {
+        ctx->log_fn(2u, "vecu_microsar_bridge: Base_Init starting");
+    }
+
     /* Wire up the Virtual-MCAL context so all vmcal modules can access
      * the push_tx_frame / pop_rx_frame / hsm / shm callbacks. */
     VMcal_Init(ctx);
+
+    /* Det must be initialized first so error hooks fire during BSW init. */
+    Det_Init(NULL);
 
     /* MICROSAR BSW initialization sequence:
      * EcuM_Init → Os_Init → SchM_Init → BswM_Init → all BSW _Init calls
@@ -58,6 +66,10 @@ EXPORT void Base_Init(const vecu_base_context_t* ctx) {
      * full BSW initialization chain via BswM rules.  For vECU we call
      * the same entry point — the GenData configuration drives the rest. */
     EcuM_Init();
+
+    if (ctx->log_fn != NULL) {
+        ctx->log_fn(2u, "vecu_microsar_bridge: Base_Init complete");
+    }
 }
 
 EXPORT void Base_Step(uint64_t tick) {
