@@ -1,7 +1,7 @@
 /* vecu_microsar_bridge.c — vECU plugin bridge for real MICROSAR BSW.
  *
  * Maps the vecu-core lifecycle (Base_Init / Base_Step / Base_Shutdown) to
- * the MICROSAR BSW lifecycle (EcuM_Init / SchM_MainFunction / EcuM_GoSleep).
+ * the MICROSAR BSW lifecycle (EcuM_Init / EcuM_StartupTwo / EcuM_GoDown).
  *
  * This file replaces the stub baselayer's Base_Entry.c when building with
  * real Vector MICROSAR sources.
@@ -18,13 +18,10 @@
 
 /* Forward declarations for MICROSAR BSW entry points.
  * These are provided by the real MICROSAR EcuM, SchM, and BswM sources. */
-extern void Det_Init(void* ConfigPtr);
 extern void EcuM_Init(void);
+extern void EcuM_StartupTwo(void);
 extern void EcuM_MainFunction(void);
-extern void SchM_Init(void);
-extern void BswM_Init(void* ConfigPtr);
-extern void EcuM_GoSleep(void);
-extern void EcuM_Shutdown(void);
+extern void BswM_Deinit(void);
 
 static const vecu_base_context_t* g_ctx = NULL;
 
@@ -56,17 +53,17 @@ EXPORT void Base_Init(const vecu_base_context_t* ctx) {
      * the push_tx_frame / pop_rx_frame / hsm / shm callbacks. */
     VMcal_Init(ctx);
 
-    /* Det must be initialized first so error hooks fire during BSW init. */
-    Det_Init(NULL);
-
     /* MICROSAR BSW initialization sequence:
-     * EcuM_Init → Os_Init → SchM_Init → BswM_Init → all BSW _Init calls
+     * EcuM_Init  → DriverInitZero (Det_Init, *_InitMemory)
+     *             → DriverInitOne  (Mcu, Port, Can, Eth, ... _Init)
+     *             → EcuM_StartOS   (no-op stub on vECU)
      *
-     * In the real target, EcuM_Init calls StartupHook which triggers the
-     * full BSW initialization chain via BswM rules.  For vECU we call
-     * the same entry point — the GenData configuration drives the rest. */
+     * EcuM_StartupTwo → SchM_Init → BswM_Init → state = RUN
+     *
+     * On the real target the OS calls EcuM_StartupTwo from StartupHook.
+     * On vECU we call it explicitly after EcuM_Init returns. */
     EcuM_Init();
-
+    EcuM_StartupTwo();
     if (ctx->log_fn != NULL) {
         ctx->log_fn(2u, "vecu_microsar_bridge: Base_Init complete");
     }
@@ -85,8 +82,10 @@ EXPORT void Base_Step(uint64_t tick) {
 }
 
 EXPORT void Base_Shutdown(void) {
-    EcuM_GoSleep();
-    EcuM_Shutdown();
+    if (g_ctx != NULL && g_ctx->log_fn != NULL) {
+        g_ctx->log_fn(2u, "vecu_microsar_bridge: Base_Shutdown");
+    }
+    BswM_Deinit();
     g_ctx = NULL;
 }
 
