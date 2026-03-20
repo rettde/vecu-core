@@ -29,6 +29,7 @@ fn vmcal_headers_compile() {
     let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
 
     let abi_include = manifest_dir.join("include");
+    let platform_include = repo_root.join("vecu-platform").join("include");
     let baselayer_include = repo_root.join("baselayer").join("include");
     let vmcal_include = repo_root.join("vmcal").join("include");
     let vhsm_include = repo_root.join("vhsm_adapter").join("include");
@@ -47,6 +48,7 @@ fn vmcal_headers_compile() {
     cc::Build::new()
         .file(&test_c)
         .include(&abi_include)
+        .include(&platform_include)
         .include(&baselayer_include)
         .include(&vmcal_include)
         .include(&vhsm_include)
@@ -66,6 +68,7 @@ fn vmcal_sources_compile() {
     let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
 
     let abi_include = manifest_dir.join("include");
+    let platform_include = repo_root.join("vecu-platform").join("include");
     let baselayer_include = repo_root.join("baselayer").join("include");
     let vmcal_include = repo_root.join("vmcal").join("include");
     let vmcal_src = repo_root.join("vmcal").join("src");
@@ -97,9 +100,11 @@ fn vmcal_sources_compile() {
         .file(vmcal_src.join("Pwm.c"))
         .file(vmcal_src.join("Wdg.c"))
         .file(vmcal_src.join("Lin.c"))
+        .file(vmcal_src.join("Icu.c"))
         .file(vhsm_src.join("Crypto_30_vHsm.c"))
         .file(os_src.join("Os_Mapping.c"))
         .include(&abi_include)
+        .include(&platform_include)
         .include(&baselayer_include)
         .include(&vmcal_include)
         .include(&vhsm_include)

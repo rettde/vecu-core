@@ -134,28 +134,26 @@ Std_ReturnType Crypto_30_vHsm_ProcessJob(uint32 objectId, Crypto_JobType* job) {
         return E_NOT_OK;
     }
 
-    Crypto_AlgorithmFamilyType fam =
-        job->jobPrimitiveInfo->primitiveInfo->algorithm.family;
+    Crypto_ServiceInfoType svc =
+        job->jobPrimitiveInfo->primitiveInfo->service;
 
     job->jobState = CRYPTO_JOBSTATE_ACTIVE;
 
     Std_ReturnType ret;
-    switch (fam) {
-    case CRYPTO_ALGOFAM_AES:
-        if (job->jobPrimitiveInputOutput.outputPtr != NULL) {
-            ret = process_encrypt(ctx, job);
-        } else {
-            ret = process_decrypt(ctx, job);
-        }
+    switch (svc) {
+    case CRYPTO_ENCRYPT:
+        ret = process_encrypt(ctx, job);
         break;
-    case CRYPTO_ALGOFAM_CMAC:
-        if (job->jobPrimitiveInputOutput.verifyPtr != NULL) {
-            ret = process_mac_verify(ctx, job);
-        } else {
-            ret = process_mac_generate(ctx, job);
-        }
+    case CRYPTO_DECRYPT:
+        ret = process_decrypt(ctx, job);
         break;
-    case CRYPTO_ALGOFAM_SHA2_256:
+    case CRYPTO_MACGENERATE:
+        ret = process_mac_generate(ctx, job);
+        break;
+    case CRYPTO_MACVERIFY:
+        ret = process_mac_verify(ctx, job);
+        break;
+    case CRYPTO_HASH:
         ret = process_hash(ctx, job);
         break;
     default:

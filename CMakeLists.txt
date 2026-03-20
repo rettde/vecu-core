@@ -6,6 +6,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 option(VECU_BUILD "Build for vECU (Virtual-MCAL + vHsm + OS-Mapping)" OFF)
 
+add_subdirectory(vecu-platform)
 add_subdirectory(baselayer)
 
 if(VECU_BUILD)
@@ -14,6 +15,5 @@ if(VECU_BUILD)
     add_subdirectory(os_mapping)
 endif()
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/sample_ecu/CMakeLists.txt")
-    add_subdirectory(examples/sample_ecu)
-endif()
+## sample_ecu is built standalone (it defines its own 'base' target).
+## Use: cmake -B build -S examples/sample_ecu

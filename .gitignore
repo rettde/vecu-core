@@ -30,3 +30,10 @@ tools/output/
 
 # Cloned external dependencies
 examples/openbsw_poc/openbsw_src/
+examples/zc_d_c0_appl/
+examples/sip_appl/
+examples/zc_d_workspace/
+examples/zc_d_manifests/
+
+# Binary archives
+*.zip

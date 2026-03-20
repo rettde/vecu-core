@@ -7,6 +7,10 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # ── Paths ────────────────────────────────────────────────────────────
 set(BASELAYER_DIR   ${CMAKE_SOURCE_DIR}/../../baselayer)
 set(ABI_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/../../crates/vecu-abi/include)
+set(VECU_PLATFORM_DIR ${CMAKE_SOURCE_DIR}/../../vecu-platform)
+if(EXISTS ${VECU_PLATFORM_DIR}/CMakeLists.txt AND NOT TARGET vecu_platform)
+    add_subdirectory(${VECU_PLATFORM_DIR} ${CMAKE_CURRENT_BINARY_DIR}/vecu-platform)
+endif()
 
 # ── BaseLayer sources ────────────────────────────────────────────────
 file(GLOB BASE_SOURCES ${BASELAYER_DIR}/src/*.c)
@@ -16,6 +20,9 @@ target_include_directories(base PUBLIC
     ${BASELAYER_DIR}/include
     ${ABI_INCLUDE_DIR}
 )
+if(TARGET vecu_platform)
+    target_link_libraries(base PUBLIC vecu_platform)
+endif()
 if(WIN32)
     target_compile_definitions(base PRIVATE BUILDING_DLL)
 else()
@@ -36,6 +43,9 @@ target_include_directories(appl_ecu PUBLIC
     ${BASELAYER_DIR}/include
     ${ABI_INCLUDE_DIR}
 )
+if(TARGET vecu_platform)
+    target_link_libraries(appl_ecu PRIVATE vecu_platform)
+endif()
 if(WIN32)
     target_compile_definitions(appl_ecu PRIVATE BUILDING_DLL)
 else()

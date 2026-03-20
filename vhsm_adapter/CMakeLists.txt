@@ -7,6 +7,10 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(ABI_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../crates/vecu-abi/include")
 set(BASELAYER_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../baselayer/include")
 set(VMCAL_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../vmcal/include")
+set(VECU_PLATFORM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../vecu-platform")
+if(EXISTS ${VECU_PLATFORM_DIR}/CMakeLists.txt AND NOT TARGET vecu_platform)
+    add_subdirectory(${VECU_PLATFORM_DIR} ${CMAKE_CURRENT_BINARY_DIR}/vecu-platform)
+endif()
 
 add_library(vhsm_adapter STATIC
     src/Crypto_30_vHsm.c
@@ -18,6 +22,9 @@ target_include_directories(vhsm_adapter PUBLIC
     ${ABI_INCLUDE_DIR}
     ${BASELAYER_INCLUDE_DIR}
 )
+if(TARGET vecu_platform)
+    target_link_libraries(vhsm_adapter PUBLIC vecu_platform)
+endif()
 
 if(WIN32)
     target_compile_definitions(vhsm_adapter PRIVATE BUILDING_DLL)

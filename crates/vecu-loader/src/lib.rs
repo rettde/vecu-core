@@ -308,7 +308,7 @@ pub fn run_simulation(config: &SimConfig) -> Result<(), LoaderError> {
     let shm = if let Some(ref shm_path) = config.shm_file {
         tracing::info!(path = %shm_path.display(), "using file-backed SHM for NvM persistence");
         SharedMemory::from_file(shm_path, config.shm_layout())
-            .map_err(|e| LoaderError::Config(format!("SHM file error: {e}")))?        
+            .map_err(|e| LoaderError::Config(format!("SHM file error: {e}")))?
     } else {
         SharedMemory::with_layout(config.shm_layout())
     };

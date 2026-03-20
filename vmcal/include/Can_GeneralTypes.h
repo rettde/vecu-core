@@ -9,6 +9,9 @@
 
 #ifndef CAN_GENERAL_TYPES_H
 #define CAN_GENERAL_TYPES_H
+#ifndef CAN_GENERAL_TYPES
+#define CAN_GENERAL_TYPES
+#endif
 
 #include "Std_Types.h"
 #include "ComStack_Types.h"

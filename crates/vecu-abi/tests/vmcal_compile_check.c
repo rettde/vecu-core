@@ -30,6 +30,7 @@
 #include "Pwm.h"
 #include "Wdg.h"
 #include "Lin.h"
+#include "Icu.h"
 
 #include "Crypto_30_vHsm.h"
 
@@ -114,6 +115,12 @@ static void smoke_test_types(void) {
 
     Lin_StatusType lin_st = LIN_NOT_OK;
     (void)lin_st;
+
+    Icu_InputStateType icu_st = ICU_IDLE;
+    (void)icu_st;
+
+    Icu_ActivationType icu_act = ICU_BOTH_EDGES;
+    (void)icu_act;
 
     Crypto_30_vHsm_ConfigType hsm_cfg;
     hsm_cfg.numKeys = 20;

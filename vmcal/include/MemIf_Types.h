@@ -33,4 +33,6 @@ typedef enum {
     MEMIF_MODE_FAST = 0x01u
 } MemIf_ModeType;
 
+typedef uint8* MemIf_DataPtr_pu8;
+
 #endif /* MEMIF_TYPES_H */

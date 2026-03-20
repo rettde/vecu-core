@@ -7,6 +7,12 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # ── Include paths ────────────────────────────────────────────────────
+# vecu-platform provides Platform_Types.h, Compiler.h, Std_Types.h, Os.h, etc.
+set(VECU_PLATFORM_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../vecu-platform)
+if(EXISTS ${VECU_PLATFORM_DIR}/CMakeLists.txt AND NOT TARGET vecu_platform)
+    add_subdirectory(${VECU_PLATFORM_DIR} ${CMAKE_CURRENT_BINARY_DIR}/vecu-platform)
+endif()
+
 # BaseLayer's own headers
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
@@ -45,6 +51,9 @@ set(BASE_SOURCES
 
 # ── Shared library ───────────────────────────────────────────────────
 add_library(base SHARED ${BASE_SOURCES})
+if(TARGET vecu_platform)
+    target_link_libraries(base PUBLIC vecu_platform)
+endif()
 
 # Export symbols on all platforms
 if(WIN32)

@@ -13,8 +13,9 @@
 
 typedef uint8  Gpt_ChannelType;
 typedef uint32 Gpt_ValueType;
-
+typedef float  Gpt_TickRateType;
 typedef void (*Gpt_NotificationType)(void);
+typedef Gpt_NotificationType Gpt_NotifyType;
 
 #define GPT_MAX_CHANNELS 16u
 
@@ -28,6 +29,7 @@ typedef enum {
     GPT_CH_MODE_CONTINUOUS = 1u
 } Gpt_ChannelModeType;
 
+#if !defined(GPT_CFG_H)
 typedef struct {
     Gpt_ChannelType       channel;
     Gpt_ChannelModeType   mode;
@@ -38,6 +40,7 @@ typedef struct {
     const Gpt_ChannelConfigType* channels;
     uint8                        numChannels;
 } Gpt_ConfigType;
+#endif /* !GPT_CFG_H */
 
 void           Gpt_Init(const Gpt_ConfigType* ConfigPtr);
 void           Gpt_DeInit(void);

@@ -61,8 +61,7 @@ struct TestBaseContext {
     _pad0: u32,
     log_fn: Option<unsafe extern "C" fn(u32, *const std::ffi::c_char)>,
     tick_interval_us: u64,
-    hsm_hash:
-        Option<unsafe extern "C" fn(u32, *const u8, u32, *mut u8, *mut u32) -> i32>,
+    hsm_hash: Option<unsafe extern "C" fn(u32, *const u8, u32, *mut u8, *mut u32) -> i32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -238,8 +237,8 @@ fn e2e_aes128_ecb_encrypt_decrypt_round_trip() {
     unsafe { (base_init)(&ctx) };
 
     let plaintext: [u8; 16] = [
-        0x6B, 0xC1, 0xBE, 0xE2, 0x2E, 0x40, 0x9F, 0x96,
-        0xE9, 0x3D, 0x7E, 0x11, 0x73, 0x93, 0x17, 0x2A,
+        0x6B, 0xC1, 0xBE, 0xE2, 0x2E, 0x40, 0x9F, 0x96, 0xE9, 0x3D, 0x7E, 0x11, 0x73, 0x93, 0x17,
+        0x2A,
     ];
     let mut ciphertext = [0u8; 16];
     let mut ct_len: u32 = 16;
@@ -313,36 +312,59 @@ fn e2e_cmac_generate_and_verify() {
     unsafe { (base_init)(&ctx) };
 
     let data: [u8; 16] = [
-        0x6B, 0xC1, 0xBE, 0xE2, 0x2E, 0x40, 0x9F, 0x96,
-        0xE9, 0x3D, 0x7E, 0x11, 0x73, 0x93, 0x17, 0x2A,
+        0x6B, 0xC1, 0xBE, 0xE2, 0x2E, 0x40, 0x9F, 0x96, 0xE9, 0x3D, 0x7E, 0x11, 0x73, 0x93, 0x17,
+        0x2A,
     ];
     let mut mac = [0u8; 16];
     let mut mac_len: u32 = 16;
 
     let rc = unsafe {
-        (csm_mac_gen)(0, data.as_ptr(), 16, mac.as_mut_ptr(), std::ptr::addr_of_mut!(mac_len))
+        (csm_mac_gen)(
+            0,
+            data.as_ptr(),
+            16,
+            mac.as_mut_ptr(),
+            std::ptr::addr_of_mut!(mac_len),
+        )
     };
     assert_eq!(rc, 0, "Csm_MacGenerate failed");
     assert_eq!(mac_len, 16);
-    assert!(
-        mac.iter().any(|&b| b != 0),
-        "CMAC must not be all zeros"
-    );
+    assert!(mac.iter().any(|&b| b != 0), "CMAC must not be all zeros");
 
     let mut verify_result: u8 = 0;
     let rc = unsafe {
-        (csm_mac_verify)(0, data.as_ptr(), 16, mac.as_ptr(), 16, std::ptr::addr_of_mut!(verify_result))
+        (csm_mac_verify)(
+            0,
+            data.as_ptr(),
+            16,
+            mac.as_ptr(),
+            16,
+            std::ptr::addr_of_mut!(verify_result),
+        )
     };
     assert_eq!(rc, 0, "Csm_MacVerify failed");
-    assert_eq!(verify_result, 1, "CMAC verification of correct MAC must succeed");
+    assert_eq!(
+        verify_result, 1,
+        "CMAC verification of correct MAC must succeed"
+    );
 
     let bad_mac = [0xFFu8; 16];
     let mut verify_result2: u8 = 1;
     let rc = unsafe {
-        (csm_mac_verify)(0, data.as_ptr(), 16, bad_mac.as_ptr(), 16, std::ptr::addr_of_mut!(verify_result2))
+        (csm_mac_verify)(
+            0,
+            data.as_ptr(),
+            16,
+            bad_mac.as_ptr(),
+            16,
+            std::ptr::addr_of_mut!(verify_result2),
+        )
     };
     assert_eq!(rc, 0, "Csm_MacVerify should return E_OK even on mismatch");
-    assert_eq!(verify_result2, 0, "CMAC verification of wrong MAC must fail");
+    assert_eq!(
+        verify_result2, 0,
+        "CMAC verification of wrong MAC must fail"
+    );
 
     unsafe { (base_shutdown)() };
     if let Some(f) = hsm_api.shutdown {

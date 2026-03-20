@@ -10,6 +10,7 @@
 
 #include "Std_Types.h"
 
+#ifndef LIN_GENERALTYPES_H
 typedef uint8 Lin_FramePidType;
 typedef uint8 Lin_FrameDlType;
 
@@ -38,10 +39,13 @@ typedef enum {
     LIN_RX_NO_RESPONSE = 8u,
     LIN_CH_SLEEP      = 9u
 } Lin_StatusType;
+#endif /* LIN_GENERALTYPES_H */
 
+#if !defined(LIN_CFG_H)
 typedef struct {
     uint8 numChannels;
 } Lin_ConfigType;
+#endif
 
 void            Lin_Init(const Lin_ConfigType* Config);
 void            Lin_DeInit(void);

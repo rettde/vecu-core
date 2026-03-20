@@ -19,9 +19,7 @@ fn vmcal_functional_tests_run() {
     let vmcal_include = repo_root.join("vmcal").join("include");
     let vmcal_src = repo_root.join("vmcal").join("src");
 
-    let test_c = manifest_dir
-        .join("tests")
-        .join("vmcal_functional_test.c");
+    let test_c = manifest_dir.join("tests").join("vmcal_functional_test.c");
 
     let out_dir = std::env::temp_dir().join("vecu_vmcal_functional_test");
     std::fs::create_dir_all(&out_dir).expect("create temp dir");
@@ -55,9 +53,7 @@ fn vmcal_functional_tests_run() {
         cmd.arg(src);
     }
 
-    let compile_output = cmd
-        .output()
-        .expect("failed to invoke C compiler");
+    let compile_output = cmd.output().expect("failed to invoke C compiler");
 
     let compile_stdout = String::from_utf8_lossy(&compile_output.stdout);
     let compile_stderr = String::from_utf8_lossy(&compile_output.stderr);

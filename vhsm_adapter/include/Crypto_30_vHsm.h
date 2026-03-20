@@ -10,81 +10,13 @@
 #define CRYPTO_30_VHSM_H
 
 #include "Std_Types.h"
+#include "Crypto_GeneralTypes.h"
 
-typedef uint32 Crypto_JobIdType;
-
-typedef enum {
-    CRYPTO_ALGOFAM_AES       = 0u,
-    CRYPTO_ALGOFAM_SHA2_256  = 1u,
-    CRYPTO_ALGOFAM_CMAC      = 2u
-} Crypto_AlgorithmFamilyType;
-
-typedef enum {
-    CRYPTO_ALGOMODE_ECB = 0u,
-    CRYPTO_ALGOMODE_CBC = 1u
-} Crypto_AlgorithmModeType;
-
-typedef enum {
-    CRYPTO_OPERATIONMODE_START       = 0x01u,
-    CRYPTO_OPERATIONMODE_UPDATE      = 0x02u,
-    CRYPTO_OPERATIONMODE_STREAMSTART = 0x03u,
-    CRYPTO_OPERATIONMODE_FINISH      = 0x04u,
-    CRYPTO_OPERATIONMODE_SINGLECALL  = 0x07u
-} Crypto_OperationModeType;
-
-typedef enum {
-    CRYPTO_E_VER_OK       = 0u,
-    CRYPTO_E_VER_NOT_OK   = 1u
-} Crypto_VerifyResultType;
-
-typedef struct {
-    Crypto_AlgorithmFamilyType family;
-    Crypto_AlgorithmModeType   mode;
-    uint32                     keyLength;
-} Crypto_AlgorithmInfoType;
-
-typedef struct {
-    const uint8* inputPtr;
-    uint32       inputLength;
-    uint8*       outputPtr;
-    uint32*      outputLengthPtr;
-    const uint8* secondaryInputPtr;
-    uint32       secondaryInputLength;
-    Crypto_VerifyResultType* verifyPtr;
-} Crypto_JobPrimitiveInputOutputType;
-
-typedef struct {
-    Crypto_AlgorithmInfoType algorithm;
-} Crypto_PrimitiveInfoType;
-
-typedef struct {
-    uint32                          callbackId;
-    const Crypto_PrimitiveInfoType* primitiveInfo;
-    uint32                          cryIfKeyId;
-} Crypto_JobPrimitiveInfoType;
-
-typedef struct {
-    uint32 jobId;
-    uint32 jobPriority;
-} Crypto_JobInfoType;
-
-typedef enum {
-    CRYPTO_JOBSTATE_IDLE   = 0u,
-    CRYPTO_JOBSTATE_ACTIVE = 1u
-} Crypto_JobStateType;
-
-typedef struct {
-    Crypto_JobIdType                    jobId;
-    Crypto_JobStateType                 jobState;
-    Crypto_JobPrimitiveInputOutputType  jobPrimitiveInputOutput;
-    const Crypto_JobPrimitiveInfoType*  jobPrimitiveInfo;
-    const Crypto_JobInfoType*           jobInfo;
-    uint32                              cryptoKeyId;
-} Crypto_JobType;
-
+#if !defined(CRYPTO_30_VHSM_CFG_H)
 typedef struct {
     uint8 numKeys;
 } Crypto_30_vHsm_ConfigType;
+#endif
 
 void           Crypto_30_vHsm_Init(const Crypto_30_vHsm_ConfigType* ConfigPtr);
 void           Crypto_30_vHsm_DeInit(void);
