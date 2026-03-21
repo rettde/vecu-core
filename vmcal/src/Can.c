@@ -15,6 +15,14 @@
 #include "VMcal_Context.h"
 #include "vecu_frame.h"
 #include <string.h>
+#include <stdio.h>
+
+static void can_log(int level, const char* msg) {
+    const vecu_base_context_t* ctx = VMcal_GetCtx();
+    if (ctx != NULL && ctx->log_fn != NULL) {
+        ctx->log_fn(level, msg);
+    }
+}
 
 extern void CanIf_RxIndication(const Can_HwType* Mailbox,
                                 const PduInfoType* PduInfoPtr);
@@ -42,15 +50,11 @@ static uint16           g_tx_conf_head = 0;
 static uint16           g_tx_conf_count = 0;
 
 void Can_Init(const Can_ConfigType* Config) {
-    uint8 n = 1;
-    if (Config != NULL && Config->numControllers > 0) {
-        n = (Config->numControllers <= CAN_MAX_CONTROLLERS) ?
-            (uint8)Config->numControllers : CAN_MAX_CONTROLLERS;
-    }
-    g_num_controllers = n;
+    (void)Config;
+    g_num_controllers = CAN_MAX_CONTROLLERS;
     uint8 i;
     for (i = 0; i < CAN_MAX_CONTROLLERS; i++) {
-        g_ctrl[i].current      = (i < n) ? CAN_CS_STOPPED : CAN_CS_UNINIT;
+        g_ctrl[i].current      = CAN_CS_STOPPED;
         g_ctrl[i].pending      = CAN_CS_UNINIT;
         g_ctrl[i].mode_pending = FALSE;
         g_ctrl[i].error_state  = CAN_ERRORSTATE_ACTIVE;
@@ -174,6 +178,13 @@ void Can_MainFunction_Read(void) {
             pduInfo.MetaDataPtr = NULL_PTR;
             pduInfo.SduLength = dlc;
 
+            {
+                char buf[96];
+                snprintf(buf, sizeof(buf),
+                         "vmcal Can: RX id=0x%08X len=%u -> CanIf_RxIndication",
+                         (unsigned)frame.id, (unsigned)dlc);
+                can_log(2, buf);
+            }
             CanIf_RxIndication(&mailbox, &pduInfo);
         }
     }

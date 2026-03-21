@@ -23,6 +23,15 @@ extern void EcuM_Init(void);
 extern void EcuM_StartupTwo(void);
 extern void BswM_Deinit(void);
 
+extern void Can_Init(const void* Config);
+extern uint8 Can_SetControllerMode(uint8 Controller, uint8 Transition);
+extern void Can_MainFunction_Mode(void);
+extern uint8 CanIf_SetPduMode(uint8 ControllerId, uint8 PduModeRequest);
+
+#define VECU_NUM_CAN_CONTROLLERS 8u
+#define VECU_CANIF_SET_ONLINE    5u
+#define VECU_CAN_T_START         0u
+
 static const vecu_base_context_t* g_ctx = NULL;
 
 const vecu_base_context_t* Base_GetCtx(void) {
@@ -41,6 +50,21 @@ void (*Base_GetLogFn(void))(uint32_t level, const char* msg) {
 #else
   #define EXPORT __attribute__((visibility("default")))
 #endif
+
+static void VecuCan_ForceStartControllers(void) {
+    uint8 i;
+    Can_Init(NULL);
+    for (i = 0u; i < VECU_NUM_CAN_CONTROLLERS; i++) {
+        Can_SetControllerMode(i, VECU_CAN_T_START);
+    }
+    Can_MainFunction_Mode();
+    for (i = 0u; i < VECU_NUM_CAN_CONTROLLERS; i++) {
+        CanIf_SetPduMode(i, VECU_CANIF_SET_ONLINE);
+    }
+    if (g_ctx != NULL && g_ctx->log_fn != NULL) {
+        g_ctx->log_fn(2u, "vecu_microsar_bridge: CAN controllers force-started (8x ONLINE)");
+    }
+}
 
 EXPORT void Base_Init(const vecu_base_context_t* ctx) {
     g_ctx = ctx;
@@ -65,6 +89,13 @@ EXPORT void Base_Init(const vecu_base_context_t* ctx) {
     EcuM_Init();
     EcuM_StartupTwo();
     VecuBswScheduler_Init();
+
+    /* In the real ECU, BswM rules trigger ComM → CanSM → CanIf →
+     * Can_SetControllerMode after wakeup/NvM-ReadAll.  In the vECU
+     * these conditions are not met, so we force-start all 8 CAN
+     * controllers and set CanIf PDU channels to ONLINE. */
+    VecuCan_ForceStartControllers();
+
     if (ctx->log_fn != NULL) {
         ctx->log_fn(2u, "vecu_microsar_bridge: Base_Init complete");
     }

@@ -12,7 +12,7 @@
 
 #include "Can_GeneralTypes.h"
 
-#define CAN_MAX_CONTROLLERS 4u
+#define CAN_MAX_CONTROLLERS 8u
 #define CAN_RX_QUEUE_SIZE   32u
 #define CAN_TX_QUEUE_SIZE   16u
 

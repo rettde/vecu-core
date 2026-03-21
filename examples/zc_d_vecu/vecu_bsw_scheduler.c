@@ -52,6 +52,14 @@ extern void CanTp_MainFunction(void);
 /* BswNvm_SyncTask_LowPrio_Core0_QM (5 ms, 1 step) */
 extern void NvM_MainFunction(void);
 
+/* Virtual-MCAL CAN driver MainFunctions (replaces Can_30_Core_MainFunction_*
+ * which are declared — not macro-mapped — in Can_30_Core.h and resolve to
+ * no-op stubs.  We call the vmcal versions directly.) */
+extern void Can_MainFunction_Read(void);
+extern void Can_MainFunction_Write(void);
+extern void Can_MainFunction_Mode(void);
+extern void Can_MainFunction_BusOff(void);
+
 /* BswSm_SyncTask_LowPrio_Core0_QM (10 ms, 2 steps) */
 extern void EcuM_MainFunction(void);
 extern void ComM_MainFunction_0(void);
@@ -320,6 +328,17 @@ void VecuBswScheduler_Step(uint64_t tick) {
         BswHighPrio_Dispatch();     /* prio: NON (non-preemptive) */
         BswSm_Dispatch();           /* prio: 103 */
         BswLowPrio_Dispatch();      /* prio: 100 (FULL) */
+    }
+
+    /* Virtual-MCAL CAN driver: Read + Write every tick (matching the
+     * LeanScheduler_Bsw_veGw_Core2_QM polling frequency on the real
+     * target), Mode + BusOff every 10 ms. */
+    Can_MainFunction_Read();
+    Can_MainFunction_Write();
+
+    if ((tick % 10u) == 0u) {
+        Can_MainFunction_Mode();
+        Can_MainFunction_BusOff();
     }
 
     /* CanTp requires frequent processing (called in veGwM polling loop
