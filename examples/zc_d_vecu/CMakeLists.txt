@@ -263,6 +263,8 @@ message(STATUS "  BSW .c files:     ${_bsw_count}")
 set(APPL_SOURCES
     # vECU plugin bridge (Base_Init/Step/Shutdown → MICROSAR lifecycle)
     ${CMAKE_CURRENT_SOURCE_DIR}/vecu_microsar_bridge.c
+    # Cyclic BSW MainFunction dispatcher (replaces OS task scheduling)
+    ${CMAKE_CURRENT_SOURCE_DIR}/vecu_bsw_scheduler.c
     # Det error/runtime/transient callout hooks → vecu log_fn
     ${CMAKE_CURRENT_SOURCE_DIR}/vecu_det_logging.c
 )

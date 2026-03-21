@@ -11,6 +11,7 @@
 
 #include <stddef.h>
 #include "vecu_base_context.h"
+#include "vecu_bsw_scheduler.h"
 
 #ifdef VECU_BUILD
 
@@ -20,7 +21,6 @@
  * These are provided by the real MICROSAR EcuM, SchM, and BswM sources. */
 extern void EcuM_Init(void);
 extern void EcuM_StartupTwo(void);
-extern void EcuM_MainFunction(void);
 extern void BswM_Deinit(void);
 
 static const vecu_base_context_t* g_ctx = NULL;
@@ -64,21 +64,18 @@ EXPORT void Base_Init(const vecu_base_context_t* ctx) {
      * On vECU we call it explicitly after EcuM_Init returns. */
     EcuM_Init();
     EcuM_StartupTwo();
+    VecuBswScheduler_Init();
     if (ctx->log_fn != NULL) {
         ctx->log_fn(2u, "vecu_microsar_bridge: Base_Init complete");
     }
 }
 
 EXPORT void Base_Step(uint64_t tick) {
-    (void)tick;
-
-    /* In the real target, the OS timer ISR triggers SchM partitions which
-     * call the BSW MainFunctions.  For vECU we call EcuM_MainFunction
-     * which dispatches to SchM → BswM → all module MainFunctions.
-     *
-     * The tick value is available via the context but MICROSAR uses its
-     * own OS counter incremented by the OS-Mapping layer. */
-    EcuM_MainFunction();
+    /* In the real target, the OS runs cyclic tasks (alarms) that call BSW
+     * MainFunctions at configured intervals (5 ms / 10 ms).  The vECU BSW
+     * scheduler replicates the Core0 Rte task dispatch pattern extracted
+     * from the generated Rte_OS_Application_Core0_QM.c. */
+    VecuBswScheduler_Step(tick);
 }
 
 EXPORT void Base_Shutdown(void) {
