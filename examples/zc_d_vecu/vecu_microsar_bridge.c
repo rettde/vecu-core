@@ -40,6 +40,21 @@ extern void CanIf_ControllerModeIndicationAr403(uint8 ControllerId, uint8 Contro
 extern void CanIf_Init(const void* ConfigPtr);
 extern void CanTp_Init(const void* ConfigPtr);
 
+extern void EthIf_Init(const void* ConfigPtr);
+extern void IpduM_Init(const void* ConfigPtr);
+extern void EthTSyn_Init(const void* ConfigPtr);
+extern void CanTSyn_Init(const void* ConfigPtr);
+extern void Sd_Init(const void* ConfigPtr);
+extern void Sd_PostInit(void);
+extern void StbM_Init(const void* ConfigPtr);
+extern void veGwM_PostInit(void);
+extern void EthSM_Init(const void* ConfigPtr);
+extern void LinTrcv_30_Generic_Init_Vtt(const void* ConfigPtr);
+extern void LinIf_Init(const void* ConfigPtr);
+extern void LinTp_Init(const void* ConfigPtr);
+extern void LinSM_Init(const void* ConfigPtr);
+extern void UdpNm_Init(const void* ConfigPtr);
+
 static void microsar_rx_indication(uint16 Hrh, uint32 CanId, uint8 CanDlc,
                                     const uint8* CanSduPtr);
 static void microsar_ctrl_mode_indication(uint8 ControllerId, uint8 ControllerMode);
@@ -101,10 +116,26 @@ void (*Base_GetLogFn(void))(uint32_t level, const char* msg) {
   #define EXPORT __attribute__((visibility("default")))
 #endif
 
+static void VecuBsw_InitNonCore0Modules(void) {
+    CanIf_Init(NULL);
+    EthIf_Init(NULL);
+    IpduM_Init(NULL);
+    CanTp_Init(NULL);
+    LinTrcv_30_Generic_Init_Vtt(NULL);
+    LinIf_Init(NULL);
+    LinTp_Init(NULL);
+    LinSM_Init(NULL);
+    EthSM_Init(NULL);
+    UdpNm_Init(NULL);
+    EthTSyn_Init(NULL);
+    CanTSyn_Init(NULL);
+    Sd_Init(NULL);
+    Sd_PostInit();
+    veGwM_PostInit();
+}
+
 static void VecuCan_ForceStartControllers(void) {
     uint8 i;
-    CanIf_Init(NULL);
-    CanTp_Init(NULL);
     Can_Init(NULL);
     Can_ConfigureRxMailboxes(s_rx_hohs, (uint8)(sizeof(s_rx_hohs) / sizeof(s_rx_hohs[0])));
     Can_SetRxIndicationCallback(microsar_rx_indication);
@@ -144,6 +175,8 @@ EXPORT void Base_Init(const vecu_base_context_t* ctx) {
     EcuM_Init();
     EcuM_StartupTwo();
     VecuBswScheduler_Init();
+
+    VecuBsw_InitNonCore0Modules();
 
     /* In the real ECU, BswM rules trigger ComM → CanSM → CanIf →
      * Can_SetControllerMode after wakeup/NvM-ReadAll.  In the vECU
