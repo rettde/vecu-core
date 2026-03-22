@@ -110,6 +110,106 @@ extern void Dlt_MainFunction_OS_Application_Core0_QM(void);
 extern void Xcp_MainFunction(void);
 extern void Dcm_MainFunctionWorker(void);
 
+/* -----------------------------------------------------------------------
+ * Core1 — BswCom_SyncTask_HighPrio_Core1_QM (5 ms)
+ * ----------------------------------------------------------------------- */
+extern void Com_MainFunctionRx_ComMainFunctionRx_Core1(void);
+extern void Com_MainFunctionRouteSignals_ComMainFunctionRouteSignalsCore1(void);
+extern void Com_MainFunctionTx_ComMainFunctionTx_Core1(void);
+
+/* Core1 — BswLin_SyncTask_HighPrio_Core1_QM (5 ms, 4-step schedule table) */
+extern void LinSM_MainFunction(void);
+extern void LinIf_MainFunction_FWLP_c6d0c047(void);
+extern void LinIf_MainFunction_HVAC_COCKPIT_28c6cbd7(void);
+extern void LinIf_MainFunction_HVAC_CTRL_1_a3d2a764(void);
+extern void LinIf_MainFunction_HVAC_CTRL_2_2219f17c(void);
+extern void LinIf_MainFunction_HVAC_DVC_1_36bcc97e(void);
+extern void LinIf_MainFunction_HVAC_DVC_2_6bbf67f7(void);
+extern void LinIf_MainFunction_HVAC_STEPPER_1_15166812(void);
+extern void LinIf_MainFunction_HVAC_STEPPER_2_2e04b343(void);
+extern void LinIf_MainFunction_INTERIOR_LIGHT_1_32fc6313(void);
+extern void LinIf_MainFunction_INTERIOR_LIGHT_2_92e8f330(void);
+
+/* Core1 — BswSm_SyncTask_LowPrio_Core1_QM (10 ms, 2-step schedule table) */
+extern void ComM_MainFunction_8_OS_Application_Core1_QM(void);
+extern void ComM_MainFunction_9_OS_Application_Core1_QM(void);
+extern void ComM_MainFunction_10_OS_Application_Core1_QM(void);
+extern void ComM_MainFunction_11_OS_Application_Core1_QM(void);
+extern void ComM_MainFunction_12_OS_Application_Core1_QM(void);
+extern void ComM_MainFunction_13_OS_Application_Core1_QM(void);
+extern void ComM_MainFunction_14_OS_Application_Core1_QM(void);
+extern void ComM_MainFunction_15_OS_Application_Core1_QM(void);
+extern void ComM_MainFunction_16_OS_Application_Core1_QM(void);
+extern void ComM_MainFunction_17_OS_Application_Core1_QM(void);
+extern void Rtm_MainFunction_1(void);
+extern void Dlt_MainFunction_OS_Application_Core1_QM(void);
+
+/* -----------------------------------------------------------------------
+ * Core2 — Bsw_veGw_Core2_QM (extended task, flattened to 5/10 ms cycles)
+ * ----------------------------------------------------------------------- */
+extern void EthIf_RxQueueProcMainFunction_EthIfRxQueueProcMainFunction_EcucPartition_Core2_QM(void);
+extern void TcpIp_MainFunctionRx_EcucPartition_Core2_QM(void);
+extern void IpduM_MainFunctionRx_EcucPartition_Core2_QM(void);
+extern void SoAd_MainFunctionRx_SoAdInstance_OS_Application_Core2_QM(void);
+extern void TcpIp_MainFunctionState_EcucPartition_Core2_QM(void);
+extern void SoAd_MainFunctionState_SoAdInstance_OS_Application_Core2_QM(void);
+extern void EthIf_MainFunctionTx(void);
+extern void EthIf_MainFunctionRx(void);
+extern void EthIf_MainFunctionState(void);
+extern void SoAd_MainFunctionTx_SoAdInstance_OS_Application_Core2_QM(void);
+extern void TcpIp_MainFunctionTx_EcucPartition_Core2_QM(void);
+extern void EthIf_TxQueueProcMainFunction_EthIfTxQueueProcMainFunction_EcucPartition_Core2_QM(void);
+extern void IpduM_MainFunctionTx_EcucPartition_Core2_QM(void);
+extern void veGwM_MainFunction_GW_Core1_Polling(void);
+extern void veGwM_MainFunction_GW_Core1_Cyclic(void);
+extern void CanTSyn_MainFunction_OS_Application_Core2_QM(void);
+extern void BswM_MainFunction_OS_Application_Core2_QM(void);
+extern void Sd_MainFunction(void);
+extern void Eth_30_RSwt23_MainFunction(void);
+extern void EthSwt_30_RSwt23_MainFunctionUlSharedMgmtObj(void);
+extern void Rtm_MainFunction_2(void);
+
+/* -----------------------------------------------------------------------
+ * Core3 — BswCom_SyncTask_HighPrio_Core3_QM (5 ms + 10 ms events)
+ * ----------------------------------------------------------------------- */
+extern void EthIf_RxQueueProcMainFunction_EthIfRxQueueProcMainFunction_EcucPartition_Core3_QM(void);
+extern void TcpIp_MainFunctionRx_EcucPartition_Core3_QM(void);
+extern void SoAd_MainFunctionRx_SoAdInstance_OS_Application_Core3_QM(void);
+extern void Com_MainFunctionRx_ComMainFunctionRx_Core3(void);
+extern void Com_MainFunctionRouteSignals_Com_MainFunctionRouteSignals_Core3(void);
+extern void Com_MainFunctionTx_ComMainFunctionTx_Core3(void);
+extern void EthIf_TxQueueProcMainFunction_EthIfTxQueueProcMainFunction_EcucPartition_Core3_QM(void);
+extern void EthTSyn_MainFunction(void);
+extern void TcpIp_MainFunctionTx_EcucPartition_Core3_QM(void);
+extern void StbM_MainFunction_OS_Application_Core3_QM(void);
+
+/* Core3 — BswSm_SyncTask_LowPrio_Core3_QM (10 ms, 2-step schedule table) */
+extern void UdpNm_MainFunction_0(void);
+extern void EthSM_MainFunction(void);
+extern void Nm_MainFunction_OS_Application_Core3_QM(void);
+extern void Rtm_MainFunction_3(void);
+
+/* Core3 — Bsw_SyncTask_HighPrio_Core3_QM (10 ms, 2-step schedule table) */
+extern void BswM_MainFunction_OS_Application_Core3_QM(void);
+extern void ComM_MainFunction_18_OS_Application_Core3_QM(void);
+extern void ComM_MainFunction_19_OS_Application_Core3_QM(void);
+extern void ComM_MainFunction_20_OS_Application_Core3_QM(void);
+extern void ComM_MainFunction_21_OS_Application_Core3_QM(void);
+extern void ComM_MainFunction_22_OS_Application_Core3_QM(void);
+extern void ComM_MainFunction_23_OS_Application_Core3_QM(void);
+extern void Dlt_MainFunction_OS_Application_Core3_QM(void);
+
+/* -----------------------------------------------------------------------
+ * Core4 — BswCom_SyncTask_HighPrio_Core4_QM (5 ms)
+ * ----------------------------------------------------------------------- */
+extern void Com_MainFunctionRx_ComMainFunctionRx_Core4(void);
+extern void Com_MainFunctionTx_ComMainFunctionTx_Core4(void);
+
+/* Core4 — Bsw_SyncTask_HighPrio_Core4_QM (10 ms) */
+extern void BswM_MainFunction_OS_Application_Core4_QM(void);
+extern void Dlt_MainFunction_OS_Application_Core4_QM(void);
+extern void Rtm_MainFunction_4(void);
+
 /* ----------------------------------------------------------------------- */
 
 static uint32_t s_bswcom_step;
@@ -117,11 +217,20 @@ static uint32_t s_bswsm_step;
 static uint32_t s_bsw_highprio_step;
 static uint32_t s_bsw_lowprio_step;
 
+static uint32_t s_c1_lin_step;
+static uint32_t s_c1_sm_step;
+static uint32_t s_c3_sm_step;
+static uint32_t s_c3_highprio_step;
+
 void VecuBswScheduler_Init(void) {
     s_bswcom_step       = 0u;
     s_bswsm_step        = 0u;
     s_bsw_highprio_step = 0u;
     s_bsw_lowprio_step  = 0u;
+    s_c1_lin_step       = 0u;
+    s_c1_sm_step        = 0u;
+    s_c3_sm_step        = 0u;
+    s_c3_highprio_step  = 0u;
 }
 
 /* -----------------------------------------------------------------------
@@ -310,24 +419,199 @@ static void BswLowPrio_Dispatch(void) {
     }
 }
 
+/* =======================================================================
+ * Core1 dispatch functions
+ * ======================================================================= */
+
+static void BswCom_Core1_Dispatch(void) {
+    Com_MainFunctionRx_ComMainFunctionRx_Core1();
+    Com_MainFunctionRouteSignals_ComMainFunctionRouteSignalsCore1();
+    Com_MainFunctionTx_ComMainFunctionTx_Core1();
+}
+
+static void BswLin_Core1_Dispatch(void) {
+    if (s_c1_lin_step == 0u) {
+        LinSM_MainFunction();
+        s_c1_lin_step = 1u;
+    } else if (s_c1_lin_step <= 2u) {
+        LinIf_MainFunction_FWLP_c6d0c047();
+        LinIf_MainFunction_HVAC_COCKPIT_28c6cbd7();
+        LinIf_MainFunction_HVAC_CTRL_1_a3d2a764();
+        LinIf_MainFunction_HVAC_CTRL_2_2219f17c();
+        LinIf_MainFunction_HVAC_DVC_1_36bcc97e();
+        LinIf_MainFunction_HVAC_DVC_2_6bbf67f7();
+        LinIf_MainFunction_HVAC_STEPPER_1_15166812();
+        LinIf_MainFunction_HVAC_STEPPER_2_2e04b343();
+        LinIf_MainFunction_INTERIOR_LIGHT_1_32fc6313();
+        LinIf_MainFunction_INTERIOR_LIGHT_2_92e8f330();
+        s_c1_lin_step = (s_c1_lin_step == 1u) ? 2u : 3u;
+    } else {
+        LinSM_MainFunction();
+        s_c1_lin_step = 1u;
+    }
+}
+
+static void BswSm_Core1_Dispatch(void) {
+    if (s_c1_sm_step == 0u) {
+        ComM_MainFunction_8_OS_Application_Core1_QM();
+        ComM_MainFunction_9_OS_Application_Core1_QM();
+        ComM_MainFunction_10_OS_Application_Core1_QM();
+        ComM_MainFunction_11_OS_Application_Core1_QM();
+        ComM_MainFunction_12_OS_Application_Core1_QM();
+        ComM_MainFunction_13_OS_Application_Core1_QM();
+        ComM_MainFunction_14_OS_Application_Core1_QM();
+        ComM_MainFunction_15_OS_Application_Core1_QM();
+        ComM_MainFunction_16_OS_Application_Core1_QM();
+        ComM_MainFunction_17_OS_Application_Core1_QM();
+        Rtm_MainFunction_1();
+        s_c1_sm_step = 1u;
+    } else {
+        ComM_MainFunction_8_OS_Application_Core1_QM();
+        ComM_MainFunction_9_OS_Application_Core1_QM();
+        ComM_MainFunction_10_OS_Application_Core1_QM();
+        ComM_MainFunction_11_OS_Application_Core1_QM();
+        ComM_MainFunction_12_OS_Application_Core1_QM();
+        ComM_MainFunction_13_OS_Application_Core1_QM();
+        ComM_MainFunction_14_OS_Application_Core1_QM();
+        ComM_MainFunction_15_OS_Application_Core1_QM();
+        ComM_MainFunction_16_OS_Application_Core1_QM();
+        ComM_MainFunction_17_OS_Application_Core1_QM();
+        s_c1_sm_step = 0u;
+    }
+}
+
+/* =======================================================================
+ * Core2 dispatch — Bsw_veGw_Core2_QM flattened from event-driven to cyclic
+ * ======================================================================= */
+
+static void BswVeGw_Core2_5ms(void) {
+    EthIf_RxQueueProcMainFunction_EthIfRxQueueProcMainFunction_EcucPartition_Core2_QM();
+    TcpIp_MainFunctionRx_EcucPartition_Core2_QM();
+    IpduM_MainFunctionRx_EcucPartition_Core2_QM();
+    SoAd_MainFunctionRx_SoAdInstance_OS_Application_Core2_QM();
+    TcpIp_MainFunctionState_EcucPartition_Core2_QM();
+    SoAd_MainFunctionState_SoAdInstance_OS_Application_Core2_QM();
+    EthIf_MainFunctionTx();
+    EthIf_MainFunctionRx();
+    PduR_MainFunction();
+    EthIf_TxQueueProcMainFunction_EthIfTxQueueProcMainFunction_EcucPartition_Core2_QM();
+    IpduM_MainFunctionTx_EcucPartition_Core2_QM();
+    SoAd_MainFunctionTx_SoAdInstance_OS_Application_Core2_QM();
+    TcpIp_MainFunctionTx_EcucPartition_Core2_QM();
+}
+
+static void BswVeGw_Core2_10ms(void) {
+    veGwM_MainFunction_GW_Core1_Polling();
+    veGwM_MainFunction_GW_Core1_Cyclic();
+    CanTSyn_MainFunction_OS_Application_Core2_QM();
+    BswM_MainFunction_OS_Application_Core2_QM();
+    Sd_MainFunction();
+    EthIf_MainFunctionState();
+    Eth_30_RSwt23_MainFunction();
+    EthSwt_30_RSwt23_MainFunctionUlSharedMgmtObj();
+    Rtm_MainFunction_2();
+}
+
+/* =======================================================================
+ * Core3 dispatch functions
+ * ======================================================================= */
+
+static void BswCom_Core3_5ms(void) {
+    EthIf_RxQueueProcMainFunction_EthIfRxQueueProcMainFunction_EcucPartition_Core3_QM();
+    TcpIp_MainFunctionRx_EcucPartition_Core3_QM();
+    SoAd_MainFunctionRx_SoAdInstance_OS_Application_Core3_QM();
+    Com_MainFunctionRx_ComMainFunctionRx_Core3();
+    Com_MainFunctionRouteSignals_Com_MainFunctionRouteSignals_Core3();
+    Com_MainFunctionTx_ComMainFunctionTx_Core3();
+    EthIf_TxQueueProcMainFunction_EthIfTxQueueProcMainFunction_EcucPartition_Core3_QM();
+    EthTSyn_MainFunction();
+    TcpIp_MainFunctionTx_EcucPartition_Core3_QM();
+}
+
+static void BswCom_Core3_10ms(void) {
+    StbM_MainFunction_OS_Application_Core3_QM();
+}
+
+static void BswSm_Core3_Dispatch(void) {
+    if (s_c3_sm_step == 0u) {
+        UdpNm_MainFunction_0();
+        EthSM_MainFunction();
+        Nm_MainFunction_OS_Application_Core3_QM();
+        Rtm_MainFunction_3();
+        s_c3_sm_step = 1u;
+    } else {
+        EthSM_MainFunction();
+        Nm_MainFunction_OS_Application_Core3_QM();
+        s_c3_sm_step = 0u;
+    }
+}
+
+static void BswHighPrio_Core3_Dispatch(void) {
+    if (s_c3_highprio_step == 0u) {
+        BswM_MainFunction_OS_Application_Core3_QM();
+        ComM_MainFunction_18_OS_Application_Core3_QM();
+        ComM_MainFunction_19_OS_Application_Core3_QM();
+        ComM_MainFunction_20_OS_Application_Core3_QM();
+        ComM_MainFunction_21_OS_Application_Core3_QM();
+        ComM_MainFunction_22_OS_Application_Core3_QM();
+        ComM_MainFunction_23_OS_Application_Core3_QM();
+        Dlt_MainFunction_OS_Application_Core3_QM();
+        s_c3_highprio_step = 1u;
+    } else {
+        ComM_MainFunction_18_OS_Application_Core3_QM();
+        ComM_MainFunction_19_OS_Application_Core3_QM();
+        ComM_MainFunction_20_OS_Application_Core3_QM();
+        ComM_MainFunction_21_OS_Application_Core3_QM();
+        ComM_MainFunction_22_OS_Application_Core3_QM();
+        ComM_MainFunction_23_OS_Application_Core3_QM();
+        s_c3_highprio_step = 0u;
+    }
+}
+
+/* =======================================================================
+ * Core4 dispatch functions
+ * ======================================================================= */
+
+static void BswCom_Core4_Dispatch(void) {
+    Com_MainFunctionRx_ComMainFunctionRx_Core4();
+    Com_MainFunctionTx_ComMainFunctionTx_Core4();
+}
+
+static void BswHighPrio_Core4_Dispatch(void) {
+    BswM_MainFunction_OS_Application_Core4_QM();
+    Dlt_MainFunction_OS_Application_Core4_QM();
+    Rtm_MainFunction_4();
+}
+
 /* -----------------------------------------------------------------------
  * Main entry point — called from Base_Step(tick) every 1 ms.
  *
- * Dispatches the Core0 BSW tasks at their configured cycle times,
- * respecting priority order (higher priority tasks run first).
+ * Dispatches all 5 cores' BSW tasks at their configured cycle times.
+ * Core0 tasks run first (highest priority), followed by Core1-4.
  * ----------------------------------------------------------------------- */
 void VecuBswScheduler_Step(uint64_t tick) {
-    /* 5 ms tasks */
+    /* === 5 ms tasks === */
     if ((tick % 5u) == 0u) {
-        BswCom_Dispatch();          /* prio: highest among 5ms */
-        BswNvm_Dispatch();          /* prio: 102 */
+        BswCom_Dispatch();          /* Core0 prio: highest among 5ms */
+        BswNvm_Dispatch();          /* Core0 prio: 102 */
+        BswCom_Core1_Dispatch();    /* Core1 5ms: Com RX/Route/TX */
+        BswLin_Core1_Dispatch();    /* Core1 5ms: LinIf/LinSM */
+        BswVeGw_Core2_5ms();        /* Core2 5ms: EthIf/TcpIp/SoAd/IpduM */
+        BswCom_Core3_5ms();         /* Core3 5ms: EthIf/Com/EthTSyn/TcpIp */
+        BswCom_Core4_Dispatch();    /* Core4 5ms: Com RX/TX */
     }
 
-    /* 10 ms tasks */
+    /* === 10 ms tasks === */
     if ((tick % 10u) == 0u) {
-        BswHighPrio_Dispatch();     /* prio: NON (non-preemptive) */
-        BswSm_Dispatch();           /* prio: 103 */
-        BswLowPrio_Dispatch();      /* prio: 100 (FULL) */
+        BswHighPrio_Dispatch();     /* Core0 prio: NON */
+        BswSm_Dispatch();           /* Core0 prio: 103 */
+        BswLowPrio_Dispatch();      /* Core0 prio: 100 */
+        BswSm_Core1_Dispatch();     /* Core1 10ms: ComM channels 8-17 */
+        BswVeGw_Core2_10ms();       /* Core2 10ms: veGwM/CanTSyn/BswM/Sd */
+        BswCom_Core3_10ms();        /* Core3 10ms: StbM */
+        BswSm_Core3_Dispatch();     /* Core3 10ms: UdpNm/EthSM/Nm */
+        BswHighPrio_Core3_Dispatch(); /* Core3 10ms: BswM/ComM/Dlt */
+        BswHighPrio_Core4_Dispatch(); /* Core4 10ms: BswM/Dlt */
     }
 
     /* Virtual-MCAL CAN driver: Read + Write every tick (matching the
