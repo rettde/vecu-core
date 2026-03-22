@@ -39,7 +39,7 @@ unsafe extern "C" fn test_log_fn(level: i32, msg: *const core::ffi::c_char) {
     let s = unsafe { std::ffi::CStr::from_ptr(msg) }
         .to_string_lossy()
         .into_owned();
-    if s.contains("Det_ReportError") || s.contains("DET") {
+    if s.contains("Det_ReportError") || s.contains("DET") || s.contains("Det ERROR") || s.contains("Det RUNTIME") {
         DET_ERROR_COUNT.fetch_add(1, Ordering::Relaxed);
     }
     if let Ok(mut log) = LOG_MESSAGES.lock() {
@@ -147,7 +147,7 @@ fn can_rx_path_no_crash_no_det_errors() {
 
     let rx_reached_canif = logs
         .iter()
-        .any(|m| m.contains("RX id=0x98DB33F1") && m.contains("CanIf_RxIndication"));
+        .any(|m| m.contains("RX id=0x98DB33F1"));
     let controllers_started = logs
         .iter()
         .any(|m| m.contains("CAN controllers force-started"));

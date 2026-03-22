@@ -10,6 +10,7 @@
  */
 
 #include <stddef.h>
+#include <stdio.h>
 #include "vecu_base_context.h"
 #include "vecu_bsw_scheduler.h"
 
@@ -26,13 +27,62 @@ extern void BswM_Deinit(void);
 extern void Can_Init(const void* Config);
 extern uint8 Can_SetControllerMode(uint8 Controller, uint8 Transition);
 extern void Can_MainFunction_Mode(void);
+extern void Can_ConfigureRxMailboxes(const uint8* hoh_list, uint8 count);
+typedef void (*Can_RxIndicationFnType)(uint16 Hrh, uint32 CanId, uint8 CanDlc,
+                                       const uint8* CanSduPtr);
+extern void Can_SetRxIndicationCallback(Can_RxIndicationFnType fn);
 extern uint8 CanIf_SetPduMode(uint8 ControllerId, uint8 PduModeRequest);
+extern void CanIf_RxIndicationAsr403(uint16 Hrh, uint32 CanId, uint8 CanDlc,
+                                      const uint8* CanSduPtr);
+typedef void (*Can_CtrlModeIndFnType)(uint8 ControllerId, uint8 ControllerMode);
+extern void Can_SetCtrlModeIndicationCallback(Can_CtrlModeIndFnType fn);
+extern void CanIf_ControllerModeIndicationAr403(uint8 ControllerId, uint8 ControllerMode);
+extern void CanIf_Init(const void* ConfigPtr);
+extern void CanTp_Init(const void* ConfigPtr);
+
+static void microsar_rx_indication(uint16 Hrh, uint32 CanId, uint8 CanDlc,
+                                    const uint8* CanSduPtr);
+static void microsar_ctrl_mode_indication(uint8 ControllerId, uint8 ControllerMode);
 
 #define VECU_NUM_CAN_CONTROLLERS 8u
 #define VECU_CANIF_SET_ONLINE    5u
 #define VECU_CAN_T_START         0u
 
+static const uint8 s_rx_hohs[] = {
+    1u, 2u,           /* BODY */
+    4u, 5u,           /* DOOR_FL */
+    7u, 8u,           /* DOOR_RL */
+    10u, 11u,         /* INTERIOR_LIGHT_MATRIX */
+    13u,              /* OBD */
+    15u, 16u,         /* PERIPHERY_D1 */
+    18u, 19u,         /* ROOF_CAN */
+    21u, 22u          /* SEAT */
+};
+
 static const vecu_base_context_t* g_ctx = NULL;
+
+static void microsar_rx_indication(uint16 Hrh, uint32 CanId, uint8 CanDlc,
+                                    const uint8* CanSduPtr) {
+    if (g_ctx != NULL && g_ctx->log_fn != NULL) {
+        char buf[128];
+        snprintf(buf, sizeof(buf),
+                 "vecu_microsar_bridge: CanIf_RxIndicationAsr403 Hrh=%u CanId=0x%08X dlc=%u",
+                 (unsigned)Hrh, (unsigned)CanId, (unsigned)CanDlc);
+        g_ctx->log_fn(2u, buf);
+    }
+    CanIf_RxIndicationAsr403(Hrh, CanId, CanDlc, CanSduPtr);
+}
+
+static void microsar_ctrl_mode_indication(uint8 ControllerId, uint8 ControllerMode) {
+    if (g_ctx != NULL && g_ctx->log_fn != NULL) {
+        char buf[128];
+        snprintf(buf, sizeof(buf),
+                 "vecu_microsar_bridge: CanIf_ControllerModeIndicationAr403(%u, %u)",
+                 (unsigned)ControllerId, (unsigned)ControllerMode);
+        g_ctx->log_fn(2u, buf);
+    }
+    CanIf_ControllerModeIndicationAr403(ControllerId, ControllerMode);
+}
 
 const vecu_base_context_t* Base_GetCtx(void) {
     return g_ctx;
@@ -53,7 +103,12 @@ void (*Base_GetLogFn(void))(uint32_t level, const char* msg) {
 
 static void VecuCan_ForceStartControllers(void) {
     uint8 i;
+    CanIf_Init(NULL);
+    CanTp_Init(NULL);
     Can_Init(NULL);
+    Can_ConfigureRxMailboxes(s_rx_hohs, (uint8)(sizeof(s_rx_hohs) / sizeof(s_rx_hohs[0])));
+    Can_SetRxIndicationCallback(microsar_rx_indication);
+    Can_SetCtrlModeIndicationCallback(microsar_ctrl_mode_indication);
     for (i = 0u; i < VECU_NUM_CAN_CONTROLLERS; i++) {
         Can_SetControllerMode(i, VECU_CAN_T_START);
     }
@@ -62,7 +117,7 @@ static void VecuCan_ForceStartControllers(void) {
         CanIf_SetPduMode(i, VECU_CANIF_SET_ONLINE);
     }
     if (g_ctx != NULL && g_ctx->log_fn != NULL) {
-        g_ctx->log_fn(2u, "vecu_microsar_bridge: CAN controllers force-started (8x ONLINE)");
+        g_ctx->log_fn(2u, "vecu_microsar_bridge: CAN controllers force-started");
     }
 }
 

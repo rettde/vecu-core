@@ -13,6 +13,7 @@
 #include "Can_GeneralTypes.h"
 
 #define CAN_MAX_CONTROLLERS 8u
+#define CAN_MAX_MAILBOXES   24u
 #define CAN_RX_QUEUE_SIZE   32u
 #define CAN_TX_QUEUE_SIZE   16u
 
@@ -33,5 +34,13 @@ void            Can_MainFunction_Read(void);
 void            Can_MainFunction_Write(void);
 void            Can_MainFunction_Mode(void);
 void            Can_MainFunction_BusOff(void);
+void            Can_ConfigureRxMailboxes(const uint8* hoh_list, uint8 count);
+
+typedef void (*Can_RxIndicationFnType)(uint16 Hrh, uint32 CanId, uint8 CanDlc,
+                                       const uint8* CanSduPtr);
+void            Can_SetRxIndicationCallback(Can_RxIndicationFnType fn);
+
+typedef void (*Can_CtrlModeIndFnType)(uint8 ControllerId, uint8 ControllerMode);
+void            Can_SetCtrlModeIndicationCallback(Can_CtrlModeIndFnType fn);
 
 #endif /* VMCAL_CAN_H */

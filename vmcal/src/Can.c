@@ -49,6 +49,33 @@ static Can_TxConfEntry  g_tx_conf_queue[CAN_TX_QUEUE_SIZE];
 static uint16           g_tx_conf_head = 0;
 static uint16           g_tx_conf_count = 0;
 
+static uint8            g_rx_hohs[CAN_MAX_MAILBOXES];
+static uint8            g_num_rx_hohs = 0;
+
+static Can_RxIndicationFnType g_rx_indication_fn = NULL;
+
+void Can_SetRxIndicationCallback(Can_RxIndicationFnType fn) {
+    g_rx_indication_fn = fn;
+}
+
+static Can_CtrlModeIndFnType g_ctrl_mode_ind_fn = NULL;
+
+void Can_SetCtrlModeIndicationCallback(Can_CtrlModeIndFnType fn) {
+    g_ctrl_mode_ind_fn = fn;
+}
+
+static void can_default_rx_indication(uint16 Hrh, uint32 CanId, uint8 CanDlc,
+                                       const uint8* CanSduPtr) {
+    Can_HwType mailbox;
+    PduInfoType pduInfo;
+    mailbox.CanId = CanId;
+    mailbox.Hoh = Hrh;
+    mailbox.ControllerId = 0;
+    pduInfo.SduDataPtr = (uint8*)CanSduPtr;
+    pduInfo.SduLength = CanDlc;
+    CanIf_RxIndication(&mailbox, &pduInfo);
+}
+
 void Can_Init(const Can_ConfigType* Config) {
     (void)Config;
     g_num_controllers = CAN_MAX_CONTROLLERS;
@@ -126,6 +153,13 @@ Std_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo) {
     }
     const vecu_base_context_t* ctx = VMcal_GetCtx();
     if (ctx == NULL || ctx->push_tx_frame == NULL) { return E_NOT_OK; }
+    {
+        char buf[96];
+        snprintf(buf, sizeof(buf),
+                 "vmcal Can: TX id=0x%08X len=%u hth=%u",
+                 (unsigned)PduInfo->id, (unsigned)PduInfo->length, (unsigned)Hth);
+        can_log(2, buf);
+    }
 
     vecu_frame_t frame;
     memset(&frame, 0, sizeof(frame));
@@ -149,6 +183,15 @@ Std_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo) {
     return E_NOT_OK;
 }
 
+void Can_ConfigureRxMailboxes(const uint8* hoh_list, uint8 count) {
+    uint8 n = (count <= CAN_MAX_MAILBOXES) ? count : CAN_MAX_MAILBOXES;
+    uint8 i;
+    for (i = 0; i < n; i++) {
+        g_rx_hohs[i] = hoh_list[i];
+    }
+    g_num_rx_hohs = n;
+}
+
 void Can_MainFunction_Read(void) {
     uint8 i;
     boolean any_started = FALSE;
@@ -168,24 +211,25 @@ void Can_MainFunction_Read(void) {
 
         if (frame.bus_type == VECU_BUS_CAN) {
             uint8 dlc = (frame.len <= 64u) ? (uint8)frame.len : 64u;
-            Can_HwType mailbox;
-            mailbox.CanId = frame.id;
-            mailbox.Hoh = 0;
-            mailbox.ControllerId = 0;
-
-            PduInfoType pduInfo;
-            pduInfo.SduDataPtr = frame.data;
-            pduInfo.MetaDataPtr = NULL_PTR;
-            pduInfo.SduLength = dlc;
 
             {
                 char buf[96];
                 snprintf(buf, sizeof(buf),
-                         "vmcal Can: RX id=0x%08X len=%u -> CanIf_RxIndication",
-                         (unsigned)frame.id, (unsigned)dlc);
+                         "vmcal Can: RX id=0x%08X len=%u hohs=%u",
+                         (unsigned)frame.id, (unsigned)dlc, (unsigned)g_num_rx_hohs);
                 can_log(2, buf);
             }
-            CanIf_RxIndication(&mailbox, &pduInfo);
+
+            Can_RxIndicationFnType rx_fn = g_rx_indication_fn
+                                            ? g_rx_indication_fn
+                                            : can_default_rx_indication;
+            if (g_num_rx_hohs == 0) {
+                rx_fn(0u, frame.id, dlc, frame.data);
+            } else {
+                for (i = 0; i < g_num_rx_hohs; i++) {
+                    rx_fn(g_rx_hohs[i], frame.id, dlc, frame.data);
+                }
+            }
         }
     }
 }
@@ -213,7 +257,11 @@ void Can_MainFunction_Mode(void) {
         if (cs->mode_pending) {
             cs->current = cs->pending;
             cs->mode_pending = FALSE;
-            CanIf_ControllerModeIndication(i, cs->current);
+            if (g_ctrl_mode_ind_fn != NULL) {
+                g_ctrl_mode_ind_fn(i, (uint8)cs->current);
+            } else {
+                CanIf_ControllerModeIndication(i, cs->current);
+            }
         }
     }
 }
